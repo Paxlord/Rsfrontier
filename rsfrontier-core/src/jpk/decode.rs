@@ -38,10 +38,12 @@ pub fn decode_jpk_lz(buf: &[u8], out: &mut Vec<u8>, size: usize) {
     while out.len() < size {
         //Get a bit from the control flag
         let bit = consume_bit(&mut cursor, &mut shift_idx, &mut flag);
+        //println!("{:x?}", &out);
 
         //bit is 0 then we copy the byte to out_buf
         if bit == 0 {
-            out.push(cursor.read_u8().unwrap());
+            let byte = cursor.read_u8().unwrap();
+            out.push(byte);
             out_index += 1;
         }
 

@@ -45,8 +45,8 @@ pub struct JpkHeader {
     magic: u32,
     version: u16,
     comp_type: JpkType,
-    start_offset: u32,
-    out_size: u32,
+    start_offset: usize,
+    out_size: usize,
 }
 
 pub fn parse_header(data: &[u8]) -> Result<JpkHeader, Error> {
@@ -55,8 +55,8 @@ pub fn parse_header(data: &[u8]) -> Result<JpkHeader, Error> {
         magic: cursor.read_u32::<LittleEndian>()?,
         version: cursor.read_u16::<LittleEndian>()?,
         comp_type: JpkType::try_from(cursor.read_u16::<LittleEndian>()?)?,
-        start_offset: cursor.read_u32::<LittleEndian>()?,
-        out_size: cursor.read_u32::<LittleEndian>()?,
+        start_offset: cursor.read_u32::<LittleEndian>()? as usize,
+        out_size: cursor.read_u32::<LittleEndian>()? as usize,
     };
     Ok(header)
 }
@@ -102,5 +102,36 @@ impl TryFrom<u16> for JpkType {
             4 => Ok(JpkType::Huffman),
             _ => Err(JpkError::InvalidType(value)),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::fs;
+
+    use crate::jpk::encode::encode_jpk_lz;
+
+    use super::{decode::decode_jpk_lz, parse_header};
+
+    #[test]
+    fn roundtrip() {
+        let encoded_file = fs::read("./tests/data/quest_ex_0_comp.bin").unwrap();
+        let decomp_file = fs::read("./tests/data/quest_ex_0_uncomp.bin").unwrap();
+        let file_header = parse_header(&encoded_file).unwrap();
+
+        let mut decomp_buf: Vec<u8> = Vec::new();
+        decode_jpk_lz(
+            &encoded_file[file_header.start_offset..],
+            &mut decomp_buf,
+            file_header.out_size,
+        );
+
+        let comp_buf = encode_jpk_lz(&decomp_file);
+        dbg!(comp_buf.len());
+        //fs::write("./tests/data/out/comp.bin", comp_buf).unwrap();
+        let mut comp_decomp_buf: Vec<u8> = Vec::new();
+        decode_jpk_lz(&comp_buf, &mut comp_decomp_buf, file_header.out_size);
+
+        assert_eq!(decomp_buf, decomp_file);
     }
 }
