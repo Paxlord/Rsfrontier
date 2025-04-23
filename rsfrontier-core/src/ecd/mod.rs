@@ -59,9 +59,9 @@ pub fn decrypt_ecd(buffer: &[u8]) -> Vec<u8> {
         for _ in 0..8 {
             let r10 = xorpad ^ r11;
             r11 = r12;
-            r12 = r12 ^ r10;
-            r12 = r12 & 0xFF;
-            xorpad = xorpad >> 4;
+            r12 ^= r10;
+            r12 &= 0xFF;
+            xorpad >>= 4;
         }
 
         r8 = ((r12 & 0xF) | ((r11 & 0xF) << 4)) as u8;
@@ -71,11 +71,55 @@ pub fn decrypt_ecd(buffer: &[u8]) -> Vec<u8> {
     out_vec
 }
 
+pub fn encrypt_ecd(buffer: &[u8]) -> Vec<u8> {
+    let mut out_buf: Vec<u8> = Vec::new();
+    let mut cursor = Cursor::new(buffer);
+
+    let file_size = buffer.len();
+    let crc32 = crc32fast::hash(buffer);
+    let index: u16 = 4;
+
+    let mut rnd = crc32.rotate_right(16) | 1;
+    let mut xorpad = get_rnd_ecd(index as usize, &mut rnd);
+    let mut r8 = xorpad as u8;
+
+    for _ in 0..file_size {
+        xorpad = get_rnd_ecd(index as usize, &mut rnd);
+        let data = cursor.read_u8().unwrap();
+
+        let mut r11 = 0;
+        let mut r12 = 0;
+
+        for _ in 0..8 {
+            let r10 = xorpad ^ r11;
+            r11 = r12;
+            r12 ^= r10;
+            r12 &= 0xFF;
+            xorpad >>= 4;
+        }
+
+        let mut dig2 = data as u32;
+        let mut dig1 = (dig2 >> 4) & 0xFF;
+        dig1 ^= r11;
+        dig2 ^= r12;
+        dig1 ^= dig2;
+
+        let mut rr = ((dig2 & 0xF) | ((dig1 & 0xF) << 4)) as u8;
+        rr ^= r8;
+        out_buf.push(rr);
+        r8 = data;
+    }
+
+    out_buf
+}
+
 #[cfg(test)]
 mod test {
     use std::fs;
 
     use crate::ecd::decrypt_ecd;
+
+    use super::encrypt_ecd;
 
     #[test]
     fn decrypting_ecd() {
@@ -85,5 +129,15 @@ mod test {
         let custom_decrypted_buf = decrypt_ecd(&encrypted_buf);
 
         assert_eq!(custom_decrypted_buf, decrypted_buf);
+    }
+
+    #[test]
+    fn encrypting_ecd() {
+        let encrypted_buf = fs::read("./tests/data/mhfdat.bin").unwrap();
+        let decrypted_buf = fs::read("./tests/data/mhfdat_decrypted_only.bin").unwrap();
+
+        let custom_encrypted_buf = encrypt_ecd(&decrypted_buf);
+
+        assert_eq!(custom_encrypted_buf, &encrypted_buf[16..]);
     }
 }
