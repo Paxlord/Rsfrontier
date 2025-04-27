@@ -111,10 +111,14 @@ mod test {
 
     use crate::jpk::encode::encode_jpk_lz;
 
-    use super::{decode::decode_jpk_lz, parse_header};
+    use super::{
+        decode::{decode_jpk_huff, decode_jpk_huff_lz, decode_jpk_huff_raw, decode_jpk_lz},
+        encode::encode_jpk_hfi,
+        parse_header,
+    };
 
     #[test]
-    fn roundtrip() {
+    fn roundtrip_lz() {
         let encoded_file = fs::read("./tests/data/quest_ex_0_comp.bin").unwrap();
         let decomp_file = fs::read("./tests/data/quest_ex_0_uncomp.bin").unwrap();
         let file_header = parse_header(&encoded_file).unwrap();
@@ -133,5 +137,17 @@ mod test {
         decode_jpk_lz(&comp_buf, &mut comp_decomp_buf, file_header.out_size);
 
         assert_eq!(decomp_buf, decomp_file);
+    }
+
+    #[test]
+    fn roundtrip_hfi() {
+        let decomp_file = fs::read("./tests/data/mhfdat_decrypt_decomp.bin").unwrap();
+        let size = decomp_file.len();
+        println!("encoding data...");
+        let huff_comp = encode_jpk_hfi(&decomp_file);
+        println!("decoding data...");
+        let mut huff_decomp = Vec::new();
+        decode_jpk_huff_lz(&huff_comp, &mut huff_decomp, size);
+        assert!(decomp_file == huff_decomp, "the buffers are not equal");
     }
 }

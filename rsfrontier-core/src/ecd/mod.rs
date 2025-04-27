@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 pub struct EcdHeader {
     magic: u32,
@@ -79,6 +79,12 @@ pub fn encrypt_ecd(buffer: &[u8]) -> Vec<u8> {
     let crc32 = crc32fast::hash(buffer);
     let index: u16 = 4;
 
+    out_buf.write_u32::<LittleEndian>(442786661).unwrap(); //magic
+    out_buf.write_u16::<LittleEndian>(4).unwrap(); //index;
+    out_buf.write_u16::<LittleEndian>(31739).unwrap(); //Version/Unk
+    out_buf.write_u32::<LittleEndian>(file_size as u32).unwrap();
+    out_buf.write_u32::<LittleEndian>(crc32).unwrap();
+
     let mut rnd = crc32.rotate_right(16) | 1;
     let mut xorpad = get_rnd_ecd(index as usize, &mut rnd);
     let mut r8 = xorpad as u8;
@@ -138,6 +144,9 @@ mod test {
 
         let custom_encrypted_buf = encrypt_ecd(&decrypted_buf);
 
-        assert_eq!(custom_encrypted_buf, &encrypted_buf[16..]);
+        assert!(
+            custom_encrypted_buf == encrypted_buf,
+            "The buffers don't match"
+        );
     }
 }
