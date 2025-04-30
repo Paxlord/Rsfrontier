@@ -148,6 +148,12 @@ pub fn find_longest_match(
                 .count();
 
             let total_length = min_length + extended_length;
+            //We found a good enough match returning this one
+            if total_length >= 32 {
+                best_match = Some((i, total_length));
+                return best_match;
+            }
+
             if best_match.is_none_or(|(_, len)| total_length > len) {
                 best_match = Some((i, total_length));
             }

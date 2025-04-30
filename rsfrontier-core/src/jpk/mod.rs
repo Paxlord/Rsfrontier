@@ -1,6 +1,7 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use core::fmt;
 use decode::{decode_jpk_huff_lz, decode_jpk_huff_raw, decode_jpk_lz, decode_jpk_raw};
+use encode::{encode_jpk_hfi, encode_jpk_huff, encode_jpk_lz};
 use std::io::{Cursor, Error};
 
 mod decode;
@@ -79,8 +80,33 @@ pub fn decode_jpk(data: &[u8]) -> Vec<u8> {
     final_buf
 }
 
-pub fn create_jpk(data: &[u8], comp_type: u16, level: u32) -> Vec<u8> {
-    todo!()
+pub fn create_jpk(data: &[u8], comp_type: u16) -> Vec<u8> {
+    let magic: u32 = 0x1A524B4A;
+    let version: u16 = 264;
+    let start_offset: u32 = 0x10;
+    let out_size: u32 = data.len().try_into().unwrap();
+    let mut out_vec: Vec<u8> = Vec::new();
+
+    out_vec.write_u32::<LittleEndian>(magic).unwrap();
+    out_vec.write_u16::<LittleEndian>(version).unwrap();
+    out_vec.write_u16::<LittleEndian>(comp_type).unwrap();
+    out_vec.write_u32::<LittleEndian>(start_offset).unwrap();
+    out_vec.write_u32::<LittleEndian>(out_size).unwrap();
+
+    let packed_buf = match JpkType::try_from(comp_type).unwrap() {
+        JpkType::Raw => data.to_vec(),
+        JpkType::HuffmanRw => encode_jpk_huff(data),
+        JpkType::Lz => encode_jpk_lz(data),
+        JpkType::Huffman => encode_jpk_hfi(data),
+    };
+
+    out_vec.extend(packed_buf);
+    out_vec
+}
+
+pub fn is_buf_jpk(buffer: &[u8]) -> bool {
+    let magic = u32::from_le_bytes(buffer[0..4].try_into().unwrap());
+    magic == 441600842
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

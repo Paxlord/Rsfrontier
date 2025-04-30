@@ -119,6 +119,11 @@ pub fn encrypt_ecd(buffer: &[u8]) -> Vec<u8> {
     out_buf
 }
 
+pub fn is_buf_ecd(buffer: &[u8]) -> bool {
+    let magic = u32::from_le_bytes(buffer[0..4].try_into().unwrap());
+    magic == 442786661
+}
+
 #[cfg(test)]
 mod test {
     use std::fs;

@@ -11,9 +11,13 @@ pub const MAGIC_TO_EXTENSION: &[(u32, &str)] = &[
     (1213027374, "tmh"),
 ];
 
-pub fn get_exstension(magic: u32) -> Option<&'static str> {
+pub fn get_extension(magic: u32) -> Option<&'static str> {
     MAGIC_TO_EXTENSION
         .iter()
         .find(|(m, _)| *m == magic)
         .map(|&(_, ext)| ext)
+}
+
+pub fn find_buf_extension(buf: &[u8]) -> &str {
+    get_extension(u32::from_le_bytes(buf[0..4].try_into().unwrap())).unwrap_or("bin")
 }
