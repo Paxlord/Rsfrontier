@@ -163,6 +163,66 @@ pub fn find_longest_match(
     best_match
 }
 
+pub fn find_longest_match_hash(
+    in_buffer: &[u8],
+    hash_chain: &HashMap<u32, usize>,
+    current_buffer: &[u8],
+    min_length: usize,
+) -> Option<(usize, usize)> {
+    let mut best_match: Option<(usize, usize)> = None;
+    let pattern = &current_buffer[0..min_length];
+    let pattern_hash = calculate_hash(pattern);
+
+    if let Some(i) = hash_chain.get(&pattern_hash) {
+        let in_buffer_rest = &in_buffer[*i + min_length..];
+        let cur_buf_rest = &current_buffer[min_length..];
+
+        let extended_length = in_buffer_rest
+            .iter()
+            .zip(cur_buf_rest)
+            .take_while(|(a, b)| *a == *b)
+            .count();
+
+        let total_length = min_length + extended_length;
+        //We found a good enough match returning this one
+        if total_length >= 32 {
+            best_match = Some((*i, total_length));
+            return best_match;
+        }
+
+        if best_match.is_none_or(|(_, len)| total_length > len) {
+            best_match = Some((*i, total_length));
+        }
+    }
+
+    // for (i, slice) in in_buffer.windows(min_length).enumerate() {
+    //     if slice == pattern {
+    //         //we found a match now we try to expand
+    //         let in_buffer_rest = &in_buffer[i + min_length..];
+    //         let cur_buf_rest = &current_buffer[min_length..];
+
+    //         let extended_length = in_buffer_rest
+    //             .iter()
+    //             .zip(cur_buf_rest)
+    //             .take_while(|(a, b)| *a == *b)
+    //             .count();
+
+    //         let total_length = min_length + extended_length;
+    //         //We found a good enough match returning this one
+    //         if total_length >= 32 {
+    //             best_match = Some((i, total_length));
+    //             return best_match;
+    //         }
+
+    //         if best_match.is_none_or(|(_, len)| total_length > len) {
+    //             best_match = Some((i, total_length));
+    //         }
+    //     }
+    // }
+
+    best_match
+}
+
 fn set_bit_flag(out_buffer: &mut Vec<u8>, flag_idx: &mut usize, shift_idx: &mut i8, bit_val: u8) {
     *shift_idx -= 1;
 
@@ -316,23 +376,34 @@ pub fn encode_jpk_lz(decoded_buffer: &[u8]) -> Vec<u8> {
     out_buffer
 }
 
-pub fn lz_to_intermediate(decoded_buffer: &[u8]) -> (Vec<u8>, Vec<ControlToken>) {
-    let mut out_buffer: Vec<u8> = Vec::new();
+pub fn calculate_hash(buf: &[u8]) -> u32 {
+    if (buf.len() < 3) {
+        return 0;
+    }
 
-    let mut history: VecDeque<u8> = VecDeque::with_capacity(8192);
-    let mut control_tokens: Vec<ControlToken> = Vec::new();
+    u32::from_ne_bytes([buf[0], buf[1], buf[2], 0])
+}
+
+pub fn encode_jpk_lz_hashmap(decoded_buffer: &[u8]) -> Vec<u8> {
+    let mut out_buffer: Vec<u8> = Vec::new();
+    let mut flag_idx: usize = 0;
+    let mut shift_idx: i8 = 0;
+
+    let mut pattern_dict: HashMap<u32, usize> = HashMap::new();
 
     let mut i: usize = 0;
     while i < decoded_buffer.len() {
+        //We look for a sequence
         let max_search_len = std::cmp::min(280, decoded_buffer.len() - i);
-        let sequence_match = find_longest_match(
-            history.make_contiguous(),
+        let sequence_match = find_longest_match_hash(
+            decoded_buffer,
+            &pattern_dict,
             &decoded_buffer[i..i + max_search_len],
             3,
         );
 
         let encodable_match = sequence_match.and_then(|(match_start_idx, length)| {
-            let relative_offset = history.len() - match_start_idx - 1;
+            let relative_offset = i - match_start_idx - 1;
 
             if relative_offset >= i {
                 return None;
@@ -344,31 +415,58 @@ pub fn lz_to_intermediate(decoded_buffer: &[u8]) -> (Vec<u8>, Vec<ControlToken>)
                 None
             }
         });
+
+        //If we didn't find a sequence
         if encodable_match.is_none() {
+            set_bit_flag(&mut out_buffer, &mut flag_idx, &mut shift_idx, 0);
             out_buffer.push(decoded_buffer[i]);
-            control_tokens.push(ControlToken::Literal);
-            history.push_back(decoded_buffer[i]);
-            if history.len() > 8192 {
-                history.pop_front();
+            if i >= 3 && i + 3 <= decoded_buffer.len() {
+                let hash = calculate_hash(&decoded_buffer[i..i + 3]);
+                pattern_dict.insert(hash, i);
+            }
+            if i >= 8192 {
+                let old_pos = i - 8192;
+                let old_hash = calculate_hash(&decoded_buffer[old_pos..old_pos + 3]);
+                if let Some(index) = pattern_dict.get(&old_hash) {
+                    if *index == old_pos {
+                        pattern_dict.remove(&old_hash);
+                    }
+                }
             }
             i += 1;
         } else {
             let (relative_offset, length) = encodable_match.unwrap();
+            //We found a backref, setting the current bit to 1
+            set_bit_flag(&mut out_buffer, &mut flag_idx, &mut shift_idx, 1);
 
             if relative_offset < 256 && length <= 6 {
+                //short backref, set bit to 0
+                set_bit_flag(&mut out_buffer, &mut flag_idx, &mut shift_idx, 0);
                 let bit_length = (length - 3) as u8;
+                set_bit_flag(
+                    &mut out_buffer,
+                    &mut flag_idx,
+                    &mut shift_idx,
+                    bit_length >> 1,
+                );
+                set_bit_flag(
+                    &mut out_buffer,
+                    &mut flag_idx,
+                    &mut shift_idx,
+                    bit_length & 1,
+                );
                 out_buffer.push(relative_offset as u8);
-                control_tokens.push(ControlToken::ShortRef {
-                    len_bits: bit_length,
-                });
             } else if relative_offset < 8192 && length <= 9 {
+                set_bit_flag(&mut out_buffer, &mut flag_idx, &mut shift_idx, 1);
+                //long ref mode
                 let high_byte = (((length - 2) & 0x7) << 5) | ((relative_offset >> 8) & 0x1F);
                 let low_byte = relative_offset as u8;
 
                 out_buffer.push(high_byte as u8);
                 out_buffer.push(low_byte);
-                control_tokens.push(ControlToken::LongRefType1);
             } else if relative_offset < 8192 && length <= 280 {
+                set_bit_flag(&mut out_buffer, &mut flag_idx, &mut shift_idx, 1);
+                //long ref mode
                 let high_byte = (relative_offset >> 8) & 0x1F;
                 let low_byte = relative_offset as u8;
 
@@ -376,28 +474,55 @@ pub fn lz_to_intermediate(decoded_buffer: &[u8]) -> (Vec<u8>, Vec<ControlToken>)
                 out_buffer.push(low_byte);
 
                 if length <= 25 {
+                    //write the special bit as 0
+                    set_bit_flag(&mut out_buffer, &mut flag_idx, &mut shift_idx, 0);
                     let encoded_length = (length - 10) as u8;
-                    control_tokens.push(ControlToken::LongRefType2 {
-                        len_bits: encoded_length,
-                    });
+                    //Write the length with the next 4 bits
+                    set_bit_flag(
+                        &mut out_buffer,
+                        &mut flag_idx,
+                        &mut shift_idx,
+                        encoded_length >> 3 & 1,
+                    );
+                    set_bit_flag(
+                        &mut out_buffer,
+                        &mut flag_idx,
+                        &mut shift_idx,
+                        encoded_length >> 2 & 1,
+                    );
+                    set_bit_flag(
+                        &mut out_buffer,
+                        &mut flag_idx,
+                        &mut shift_idx,
+                        encoded_length >> 1 & 1,
+                    );
+                    set_bit_flag(
+                        &mut out_buffer,
+                        &mut flag_idx,
+                        &mut shift_idx,
+                        encoded_length & 1,
+                    );
                 } else {
+                    //special case bit to 1
+                    set_bit_flag(&mut out_buffer, &mut flag_idx, &mut shift_idx, 1);
+                    //push the length as a full byte
                     out_buffer.push((length - 26) as u8);
-                    control_tokens.push(ControlToken::LongRefType3);
                 }
-            } else {
-                out_buffer.push(decoded_buffer[i]);
-                history.push_back(decoded_buffer[i]);
-                if history.len() > 8192 {
-                    history.pop_front();
-                }
-                i += 1;
-                continue;
             }
 
             for j in 0..length {
-                history.push_back(decoded_buffer[i + j]);
-                if history.len() > 8192 {
-                    history.pop_front();
+                if i + j >= 3 && i + j + 3 <= decoded_buffer.len() {
+                    let hash = calculate_hash(&decoded_buffer[i + j..i + j + 3]);
+                    pattern_dict.insert(hash, i + j);
+                }
+                if i + j >= 8192 {
+                    let old_pos = i + j - 8192;
+                    let old_hash = calculate_hash(&decoded_buffer[old_pos..old_pos + 3]);
+                    if let Some(index) = pattern_dict.get(&old_hash) {
+                        if *index == old_pos {
+                            pattern_dict.remove(&old_hash);
+                        }
+                    }
                 }
             }
 
@@ -405,7 +530,7 @@ pub fn lz_to_intermediate(decoded_buffer: &[u8]) -> (Vec<u8>, Vec<ControlToken>)
         }
     }
 
-    (out_buffer, control_tokens)
+    out_buffer
 }
 
 fn count_frequencies(data_bytes: &[u8]) -> [usize; 256] {
@@ -546,7 +671,7 @@ fn serialize_jpk_table(huffman_root: &HuffmanNode) -> Vec<u16> {
 
 pub fn encode_jpk_hfi(buffer: &[u8]) -> Vec<u8> {
     //First we encode the buffer with lz compression
-    let lz_buffer = encode_jpk_lz(buffer);
+    let lz_buffer = encode_jpk_lz_hashmap(buffer);
     //Then we count the byte frequencies of our buffer
     let frequencies = count_frequencies(&lz_buffer);
 

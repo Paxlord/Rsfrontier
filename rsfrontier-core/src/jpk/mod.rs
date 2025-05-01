@@ -1,7 +1,7 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use core::fmt;
 use decode::{decode_jpk_huff_lz, decode_jpk_huff_raw, decode_jpk_lz, decode_jpk_raw};
-use encode::{encode_jpk_hfi, encode_jpk_huff, encode_jpk_lz};
+use encode::{encode_jpk_hfi, encode_jpk_huff, encode_jpk_lz, encode_jpk_lz_hashmap};
 use std::io::{Cursor, Error};
 
 mod decode;
@@ -96,7 +96,7 @@ pub fn create_jpk(data: &[u8], comp_type: u16) -> Vec<u8> {
     let packed_buf = match JpkType::try_from(comp_type).unwrap() {
         JpkType::Raw => data.to_vec(),
         JpkType::HuffmanRw => encode_jpk_huff(data),
-        JpkType::Lz => encode_jpk_lz(data),
+        JpkType::Lz => encode_jpk_lz_hashmap(data),
         JpkType::Huffman => encode_jpk_hfi(data),
     };
 
@@ -135,7 +135,7 @@ impl TryFrom<u16> for JpkType {
 mod test {
     use std::fs;
 
-    use crate::jpk::encode::encode_jpk_lz;
+    use crate::jpk::encode::{encode_jpk_lz, encode_jpk_lz_hashmap};
 
     use super::{
         decode::{decode_jpk_huff, decode_jpk_huff_lz, decode_jpk_huff_raw, decode_jpk_lz},
@@ -157,6 +157,28 @@ mod test {
         );
 
         let comp_buf = encode_jpk_lz(&decomp_file);
+        dbg!(comp_buf.len());
+        //fs::write("./tests/data/out/comp.bin", comp_buf).unwrap();
+        let mut comp_decomp_buf: Vec<u8> = Vec::new();
+        decode_jpk_lz(&comp_buf, &mut comp_decomp_buf, file_header.out_size);
+
+        assert_eq!(decomp_buf, decomp_file);
+    }
+
+    #[test]
+    fn roundtrip_lz_hash() {
+        let encoded_file = fs::read("./tests/data/quest_ex_0_comp.bin").unwrap();
+        let decomp_file = fs::read("./tests/data/quest_ex_0_uncomp.bin").unwrap();
+        let file_header = parse_header(&encoded_file).unwrap();
+
+        let mut decomp_buf: Vec<u8> = Vec::new();
+        decode_jpk_lz(
+            &encoded_file[file_header.start_offset..],
+            &mut decomp_buf,
+            file_header.out_size,
+        );
+
+        let comp_buf = encode_jpk_lz_hashmap(&decomp_file);
         dbg!(comp_buf.len());
         //fs::write("./tests/data/out/comp.bin", comp_buf).unwrap();
         let mut comp_decomp_buf: Vec<u8> = Vec::new();
