@@ -1,21 +1,7 @@
-use std::{
-    cmp::Reverse,
-    collections::{HashMap, VecDeque},
-    hash::Hash,
-    io::Cursor,
-};
+use std::{cmp::Reverse, collections::HashMap, hash::Hash};
 
 use byteorder::{LittleEndian, WriteBytesExt};
 use priority_queue::PriorityQueue;
-use queues::{IsQueue, Queue};
-
-pub enum ControlToken {
-    Literal,
-    ShortRef { len_bits: u8 },
-    LongRefType1,
-    LongRefType2 { len_bits: u8 },
-    LongRefType3,
-}
 
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HuffmanNode {
@@ -128,7 +114,7 @@ fn set_bit_flag(out_buffer: &mut Vec<u8>, flag_idx: &mut usize, shift_idx: &mut 
 }
 
 pub fn calculate_hash(buf: &[u8]) -> u32 {
-    if (buf.len() < 3) {
+    if buf.len() < 3 {
         return 0;
     }
 
@@ -417,7 +403,7 @@ fn serialize_jpk_table(huffman_root: &HuffmanNode) -> Vec<u16> {
     jpk_table
 }
 
-pub fn encode_jpk_hfi(buffer: &[u8]) -> Vec<u8> {
+pub fn encode_jpk_huff_lz(buffer: &[u8]) -> Vec<u8> {
     //First we encode the buffer with lz compression
     let lz_buffer = encode_jpk_lz(buffer);
     //Then we count the byte frequencies of our buffer

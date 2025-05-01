@@ -1,7 +1,7 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use core::fmt;
 use decode::{decode_jpk_huff, decode_jpk_huff_lz, decode_jpk_lz, decode_jpk_raw};
-use encode::{encode_jpk_hfi, encode_jpk_huff, encode_jpk_lz};
+use encode::{encode_jpk_huff, encode_jpk_huff_lz, encode_jpk_lz};
 use std::io::{Cursor, Error};
 
 mod decode;
@@ -92,7 +92,7 @@ pub fn create_jpk(data: &[u8], comp_type: u16) -> Vec<u8> {
         JpkType::Raw => data.to_vec(),
         JpkType::HuffmanRw => encode_jpk_huff(data),
         JpkType::Lz => encode_jpk_lz(data),
-        JpkType::Huffman => encode_jpk_hfi(data),
+        JpkType::Huffman => encode_jpk_huff_lz(data),
     };
 
     out_vec.extend(packed_buf);
@@ -134,7 +134,7 @@ mod test {
 
     use super::{
         decode::{decode_jpk_huff_lz, decode_jpk_lz},
-        encode::encode_jpk_hfi,
+        encode::encode_jpk_huff_lz,
         parse_header,
     };
 
@@ -162,7 +162,7 @@ mod test {
         let decomp_file = fs::read("./tests/data/mhfdat_decrypt_decomp.bin").unwrap();
         let size = decomp_file.len();
         println!("encoding data...");
-        let huff_comp = encode_jpk_hfi(&decomp_file);
+        let huff_comp = encode_jpk_huff_lz(&decomp_file);
         println!("decoding data...");
         let huff_decomp = decode_jpk_huff_lz(&huff_comp, size);
         assert!(decomp_file == huff_decomp, "the buffers are not equal");
