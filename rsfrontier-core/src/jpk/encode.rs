@@ -345,8 +345,12 @@ fn assign_indexes<'a>(
     out_map: &mut HashMap<&'a HuffmanNode, usize>,
 ) {
     match huffman_node {
-        HuffmanNode::Leaf { freq, byte } => {}
-        HuffmanNode::Internal { freq, left, right } => {
+        HuffmanNode::Leaf { freq: _, byte: _ } => {}
+        HuffmanNode::Internal {
+            freq: _,
+            left,
+            right,
+        } => {
             if depth == 0 {
                 out_map.insert(huffman_node, 510);
             } else {
@@ -367,11 +371,16 @@ fn serialize_jpk_table(huffman_root: &HuffmanNode) -> Vec<u16> {
     assign_indexes(huffman_root, 0, &mut next_index, &mut index_map);
 
     for (node, &index) in &index_map {
-        if let HuffmanNode::Internal { freq, left, right } = node {
+        if let HuffmanNode::Internal {
+            freq: _,
+            left,
+            right,
+        } = node
+        {
             let pair_start = (index - 0x100) * 2;
 
             match &**left {
-                HuffmanNode::Leaf { freq, byte } => {
+                HuffmanNode::Leaf { freq: _, byte } => {
                     jpk_table[pair_start] = *byte as u16;
                 }
 
@@ -385,7 +394,7 @@ fn serialize_jpk_table(huffman_root: &HuffmanNode) -> Vec<u16> {
             }
 
             match &**right {
-                HuffmanNode::Leaf { freq, byte } => {
+                HuffmanNode::Leaf { freq: _, byte } => {
                     jpk_table[pair_start + 1] = *byte as u16;
                 }
 
