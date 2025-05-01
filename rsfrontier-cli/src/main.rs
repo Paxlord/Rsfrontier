@@ -26,6 +26,9 @@ struct Args {
 
     #[arg(short, long)]
     name: Option<String>,
+
+    #[arg(short, long)]
+    decrypt: Option<bool>,
 }
 
 fn main() {
@@ -36,6 +39,8 @@ fn main() {
     if let Some(name) = cli.name.as_deref() {
         println!("Name arg detected : {}", name);
         output_path.push(name);
+    } else {
+        output_path.push(input_path.file_stem().unwrap());
     }
 
     let file_buf = fs::read(input_path.as_os_str()).unwrap();
@@ -43,13 +48,15 @@ fn main() {
 
     if cli.unpack.is_some() {
         println!("Unpacking buffer");
-        let unpacked_file =
-            unpack_buffer(input_path.file_stem().unwrap().to_str().unwrap(), &out_buf);
-        if cli.name.is_none() {
-            output_path.push(unpacked_file.name);
-            output_path.set_extension(unpacked_file.ext);
+        let unpacked_file = unpack_buffer(output_path.to_str().unwrap(), &out_buf);
+        for (path, buf) in unpacked_file {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            fs::write(path.as_os_str(), &buf).unwrap();
         }
-        out_buf = unpacked_file.buffer;
+        let duration = start.elapsed();
+        println!("Processed file in {:?}", duration);
     }
 
     if let Some(jpk_type) = cli.compress {
@@ -61,7 +68,9 @@ fn main() {
         println!("Encrypting the buffer...");
         out_buf = rsfrontier_core::pack_buffer(&out_buf, PackType::Ecd);
     }
-    let duration = start.elapsed();
-    println!("Processed file in {:?}", duration);
-    fs::write(output_path.as_os_str(), &out_buf).unwrap();
+
+    if cli.decrypt.is_some() {
+        println!("Decrypting the buffer...");
+        out_buf = rsfrontier_core::ecd::decrypt_ecd(&out_buf);
+    }
 }
