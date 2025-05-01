@@ -1,7 +1,7 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use core::fmt;
-use decode::{decode_jpk_huff_lz, decode_jpk_huff_raw, decode_jpk_lz, decode_jpk_raw};
-use encode::{encode_jpk_hfi, encode_jpk_huff, encode_jpk_lz, encode_jpk_lz_hashmap};
+use decode::{decode_jpk_huff, decode_jpk_huff_lz, decode_jpk_lz, decode_jpk_raw};
+use encode::{encode_jpk_hfi, encode_jpk_huff, encode_jpk_lz};
 use std::io::{Cursor, Error};
 
 mod decode;
@@ -66,18 +66,13 @@ pub fn decode_jpk(data: &[u8]) -> Vec<u8> {
     let header = parse_header(data).unwrap();
     let file_data_off = header.start_offset as usize;
     let file_data = &data[file_data_off..];
-    let mut final_buf: Vec<u8> = Vec::with_capacity(header.out_size as usize);
 
     match header.comp_type {
-        JpkType::Raw => decode_jpk_raw(file_data, &mut final_buf, header.out_size as usize),
-        JpkType::HuffmanRw => {
-            decode_jpk_huff_raw(file_data, &mut final_buf, header.out_size as usize)
-        }
-        JpkType::Lz => decode_jpk_lz(file_data, &mut final_buf, header.out_size as usize),
-        JpkType::Huffman => decode_jpk_huff_lz(file_data, &mut final_buf, header.out_size as usize),
-    };
-
-    final_buf
+        JpkType::Raw => decode_jpk_raw(file_data, header.out_size as usize),
+        JpkType::HuffmanRw => decode_jpk_huff(file_data),
+        JpkType::Lz => decode_jpk_lz(file_data, header.out_size as usize),
+        JpkType::Huffman => decode_jpk_huff_lz(file_data, header.out_size as usize),
+    }
 }
 
 pub fn create_jpk(data: &[u8], comp_type: u16) -> Vec<u8> {
@@ -96,7 +91,7 @@ pub fn create_jpk(data: &[u8], comp_type: u16) -> Vec<u8> {
     let packed_buf = match JpkType::try_from(comp_type).unwrap() {
         JpkType::Raw => data.to_vec(),
         JpkType::HuffmanRw => encode_jpk_huff(data),
-        JpkType::Lz => encode_jpk_lz_hashmap(data),
+        JpkType::Lz => encode_jpk_lz(data),
         JpkType::Huffman => encode_jpk_hfi(data),
     };
 
@@ -135,10 +130,10 @@ impl TryFrom<u16> for JpkType {
 mod test {
     use std::fs;
 
-    use crate::jpk::encode::{encode_jpk_lz, encode_jpk_lz_hashmap};
+    use crate::jpk::encode::encode_jpk_lz;
 
     use super::{
-        decode::{decode_jpk_huff, decode_jpk_huff_lz, decode_jpk_huff_raw, decode_jpk_lz},
+        decode::{decode_jpk_huff_lz, decode_jpk_lz},
         encode::encode_jpk_hfi,
         parse_header,
     };
@@ -149,42 +144,17 @@ mod test {
         let decomp_file = fs::read("./tests/data/quest_ex_0_uncomp.bin").unwrap();
         let file_header = parse_header(&encoded_file).unwrap();
 
-        let mut decomp_buf: Vec<u8> = Vec::new();
-        decode_jpk_lz(
+        let decomp_buf = decode_jpk_lz(
             &encoded_file[file_header.start_offset..],
-            &mut decomp_buf,
             file_header.out_size,
         );
 
         let comp_buf = encode_jpk_lz(&decomp_file);
         dbg!(comp_buf.len());
-        //fs::write("./tests/data/out/comp.bin", comp_buf).unwrap();
-        let mut comp_decomp_buf: Vec<u8> = Vec::new();
-        decode_jpk_lz(&comp_buf, &mut comp_decomp_buf, file_header.out_size);
+        let comp_decomp_buf = decode_jpk_lz(&comp_buf, file_header.out_size);
 
         assert_eq!(decomp_buf, decomp_file);
-    }
-
-    #[test]
-    fn roundtrip_lz_hash() {
-        let encoded_file = fs::read("./tests/data/quest_ex_0_comp.bin").unwrap();
-        let decomp_file = fs::read("./tests/data/quest_ex_0_uncomp.bin").unwrap();
-        let file_header = parse_header(&encoded_file).unwrap();
-
-        let mut decomp_buf: Vec<u8> = Vec::new();
-        decode_jpk_lz(
-            &encoded_file[file_header.start_offset..],
-            &mut decomp_buf,
-            file_header.out_size,
-        );
-
-        let comp_buf = encode_jpk_lz_hashmap(&decomp_file);
-        dbg!(comp_buf.len());
-        //fs::write("./tests/data/out/comp.bin", comp_buf).unwrap();
-        let mut comp_decomp_buf: Vec<u8> = Vec::new();
-        decode_jpk_lz(&comp_buf, &mut comp_decomp_buf, file_header.out_size);
-
-        assert_eq!(decomp_buf, decomp_file);
+        assert_eq!(decomp_buf, comp_decomp_buf);
     }
 
     #[test]
@@ -194,8 +164,7 @@ mod test {
         println!("encoding data...");
         let huff_comp = encode_jpk_hfi(&decomp_file);
         println!("decoding data...");
-        let mut huff_decomp = Vec::new();
-        decode_jpk_huff_lz(&huff_comp, &mut huff_decomp, size);
+        let huff_decomp = decode_jpk_huff_lz(&huff_comp, size);
         assert!(decomp_file == huff_decomp, "the buffers are not equal");
     }
 }

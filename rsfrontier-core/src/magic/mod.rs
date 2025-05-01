@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 pub const MAGIC_TO_EXTENSION: &[(u32, &str)] = &[
     (542327876, "dds"),
     (0x000B0000, "ftxt"),

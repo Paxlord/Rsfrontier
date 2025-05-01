@@ -1,8 +1,4 @@
-use core::panic;
-use std::{
-    io::{self, Cursor, Seek},
-    ptr::read,
-};
+use std::io::{self, Cursor, Seek};
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
@@ -14,17 +10,13 @@ struct HuffmanState {
     data_offset: usize,
 }
 
-pub fn decode_jpk_raw(buf: &[u8], out: &mut Vec<u8>, size: usize) {
-    todo!()
-}
-
-pub fn decode_jpk_huff_raw(buf: &[u8], out: &mut Vec<u8>, size: usize) {
-    todo!()
+pub fn decode_jpk_raw(buf: &[u8], size: usize) -> Vec<u8> {
+    buf[..size].to_vec()
 }
 
 fn consume_bit(cursor: &mut Cursor<&[u8]>, shift_idx: &mut i8, flag: &mut u8) -> u8 {
     *shift_idx -= 1;
-    //If shift index less than 0 than we consumed all the bytes and we read a new flag
+
     if *shift_idx < 0 {
         *shift_idx = 7;
         *flag = cursor.read_u8().unwrap();
@@ -41,11 +33,12 @@ fn backref_to_out(out: &mut Vec<u8>, offset: usize, length: usize, out_index: &m
     }
 }
 
-pub fn decode_jpk_lz(buf: &[u8], out: &mut Vec<u8>, size: usize) {
+pub fn decode_jpk_lz(buf: &[u8], size: usize) -> Vec<u8> {
     let mut cursor = Cursor::new(buf);
     let mut flag: u8 = 0;
     let mut shift_idx: i8 = -1;
     let mut out_index: usize = 0;
+    let mut out: Vec<u8> = Vec::with_capacity(size);
 
     while out.len() < size {
         //Get a bit from the control flag
@@ -66,7 +59,12 @@ pub fn decode_jpk_lz(buf: &[u8], out: &mut Vec<u8>, size: usize) {
                 let length = (consume_bit(&mut cursor, &mut shift_idx, &mut flag) << 1)
                     | consume_bit(&mut cursor, &mut shift_idx, &mut flag);
                 let offset = cursor.read_u8().unwrap();
-                backref_to_out(out, offset as usize, (length + 3) as usize, &mut out_index);
+                backref_to_out(
+                    &mut out,
+                    offset as usize,
+                    (length + 3) as usize,
+                    &mut out_index,
+                );
             }
             if backref_type == 1 {
                 //We're in a long ref
@@ -77,7 +75,12 @@ pub fn decode_jpk_lz(buf: &[u8], out: &mut Vec<u8>, size: usize) {
 
                 //case 1 length is not equal to 0
                 if length != 0 {
-                    backref_to_out(out, offset as usize, (length + 2) as usize, &mut out_index);
+                    backref_to_out(
+                        &mut out,
+                        offset as usize,
+                        (length + 2) as usize,
+                        &mut out_index,
+                    );
                 }
                 //Special cases
                 if length == 0 {
@@ -88,7 +91,7 @@ pub fn decode_jpk_lz(buf: &[u8], out: &mut Vec<u8>, size: usize) {
                             | consume_bit(&mut cursor, &mut shift_idx, &mut flag) << 1
                             | consume_bit(&mut cursor, &mut shift_idx, &mut flag);
                         backref_to_out(
-                            out,
+                            &mut out,
                             offset as usize,
                             (length + 2 + 8) as usize,
                             &mut out_index,
@@ -104,7 +107,7 @@ pub fn decode_jpk_lz(buf: &[u8], out: &mut Vec<u8>, size: usize) {
                         }
                         if temp != 0xFF {
                             backref_to_out(
-                                out,
+                                &mut out,
                                 offset as usize,
                                 temp as usize + 0x1A,
                                 &mut out_index,
@@ -115,6 +118,8 @@ pub fn decode_jpk_lz(buf: &[u8], out: &mut Vec<u8>, size: usize) {
             }
         }
     }
+
+    out
 }
 
 fn read_huff_byte(cursor: &mut Cursor<&[u8]>, hf: &mut HuffmanState) -> io::Result<u8> {
@@ -137,22 +142,6 @@ fn read_huff_byte(cursor: &mut Cursor<&[u8]>, hf: &mut HuffmanState) -> io::Resu
     Ok(data as u8)
 }
 
-fn consume_huff_bit(
-    cursor: &mut Cursor<&[u8]>,
-    shift_idx: &mut i8,
-    flag: &mut u8,
-    hf: &mut HuffmanState,
-) -> u8 {
-    *shift_idx -= 1;
-    //If shift index less than 0 than we consumed all the bytes and we read a new flag
-    if *shift_idx < 0 {
-        *shift_idx = 7;
-        *flag = read_huff_byte(cursor, hf).unwrap();
-    }
-
-    (*flag >> *shift_idx) & 1
-}
-
 fn initialize_huffman_state(
     table_length: u16,
     table_offset: usize,
@@ -167,104 +156,9 @@ fn initialize_huffman_state(
     }
 }
 
-pub fn decode_jpk_huff_lz(buf: &[u8], out: &mut Vec<u8>, size: usize) {
-    let mut cursor = Cursor::new(buf);
-    let mut flag: u8 = 0;
-    let mut shift_idx: i8 = -1;
-    let mut out_index: usize = 0;
-
-    let table_length = cursor.read_u16::<LittleEndian>().unwrap();
-    let table_offset = cursor.position() as usize;
-    let data_offset = table_offset + table_length as usize * 4 - 0x3fc;
-    let mut hf_state = initialize_huffman_state(table_length, table_offset, data_offset);
-
-    while out.len() < size {
-        //Get a bit from the control flag
-        let bit = consume_huff_bit(&mut cursor, &mut shift_idx, &mut flag, &mut hf_state);
-        //bit is 0 then we copy the byte to out_buf
-        if bit == 0 {
-            let byte = read_huff_byte(&mut cursor, &mut hf_state).unwrap();
-            out.push(byte);
-            out_index += 1;
-        }
-
-        //We have a backref
-        if bit == 1 {
-            let backref_type =
-                consume_huff_bit(&mut cursor, &mut shift_idx, &mut flag, &mut hf_state);
-            if backref_type == 0 {
-                //we're in a short ref
-                let length =
-                    (consume_huff_bit(&mut cursor, &mut shift_idx, &mut flag, &mut hf_state) << 1)
-                        | consume_huff_bit(&mut cursor, &mut shift_idx, &mut flag, &mut hf_state);
-                let offset = read_huff_byte(&mut cursor, &mut hf_state).unwrap();
-                backref_to_out(out, offset as usize, (length + 3) as usize, &mut out_index);
-            }
-            if backref_type == 1 {
-                //We're in a long ref
-                let high_byte = read_huff_byte(&mut cursor, &mut hf_state).unwrap();
-                let low_byte = read_huff_byte(&mut cursor, &mut hf_state).unwrap();
-                let length = (high_byte & 0xE0) >> 5;
-                let offset: u16 = (((high_byte & 0x1F) as u16) << 8) | low_byte as u16;
-
-                //case 1 length is not equal to 0
-                if length != 0 {
-                    backref_to_out(out, offset as usize, (length + 2) as usize, &mut out_index);
-                }
-                //Special cases
-                if length == 0 {
-                    let special_case_bit =
-                        consume_huff_bit(&mut cursor, &mut shift_idx, &mut flag, &mut hf_state);
-                    if special_case_bit == 0 {
-                        let length =
-                            consume_huff_bit(&mut cursor, &mut shift_idx, &mut flag, &mut hf_state)
-                                << 3
-                                | consume_huff_bit(
-                                    &mut cursor,
-                                    &mut shift_idx,
-                                    &mut flag,
-                                    &mut hf_state,
-                                ) << 2
-                                | consume_huff_bit(
-                                    &mut cursor,
-                                    &mut shift_idx,
-                                    &mut flag,
-                                    &mut hf_state,
-                                ) << 1
-                                | consume_huff_bit(
-                                    &mut cursor,
-                                    &mut shift_idx,
-                                    &mut flag,
-                                    &mut hf_state,
-                                );
-                        backref_to_out(
-                            out,
-                            offset as usize,
-                            (length + 2 + 8) as usize,
-                            &mut out_index,
-                        );
-                    }
-                    if special_case_bit == 1 {
-                        let temp = read_huff_byte(&mut cursor, &mut hf_state).unwrap();
-                        if temp == 0xFF {
-                            for _ in 0..offset + 0x1B {
-                                out.push(read_huff_byte(&mut cursor, &mut hf_state).unwrap());
-                                out_index += 1;
-                            }
-                        }
-                        if temp != 0xFF {
-                            backref_to_out(
-                                out,
-                                offset as usize,
-                                temp as usize + 0x1A,
-                                &mut out_index,
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
+pub fn decode_jpk_huff_lz(buf: &[u8], size: usize) -> Vec<u8> {
+    let out_vec = decode_jpk_huff(buf);
+    decode_jpk_lz(&out_vec, size)
 }
 
 pub fn decode_jpk_huff(buf: &[u8]) -> Vec<u8> {
@@ -291,7 +185,7 @@ mod tests {
 
     use crate::jpk::decode::consume_bit;
 
-    use super::{decode_jpk_huff, decode_jpk_huff_lz, decode_jpk_lz};
+    use super::{decode_jpk_huff_lz, decode_jpk_lz};
 
     #[test]
     fn consume_bit_test() {
@@ -320,8 +214,7 @@ mod tests {
         let expected_size = 14640;
         let start_off = 16;
 
-        let mut out: Vec<u8> = Vec::new();
-        decode_jpk_lz(&compressed_data[start_off..], &mut out, expected_size);
+        let out = decode_jpk_lz(&compressed_data[start_off..], expected_size);
 
         assert_eq!(out, decompressed_data);
     }
@@ -331,41 +224,16 @@ mod tests {
         let decompressed_data = fs::read("./tests/data/mhfdat_decrypt_decomp.bin").unwrap();
         let compressed_data = fs::read("./tests/data/mhfdat_decrypted_only.bin").unwrap();
 
-        let mut out: Vec<u8> = Vec::new();
-        decode_jpk_huff_lz(&compressed_data[16..], &mut out, 28722096);
+        let out = decode_jpk_huff_lz(&compressed_data[16..], 28722096);
 
         assert!(out == decompressed_data, "The buffers are not equal");
-    }
-
-    #[test]
-    fn huff_byte_reading() {
-        let compressed_data = fs::read("./tests/data/mhfdat_decrypted_only.bin").unwrap();
-
-        let mut output = String::new();
-        for (i, chunk) in compressed_data[16..0x410].chunks(2).enumerate() {
-            let address = i * 2;
-            let value = ((chunk[1] as u16) << 8) | (chunk[0] as u16);
-
-            let bytes_str = chunk
-                .iter()
-                .map(|b| format!("{:02X}", b))
-                .collect::<Vec<String>>()
-                .join(" ");
-
-            // Output format: "address: ushort [ bytes ]"
-            output.push_str(&format!("{:x}: {} [ {} ]\n", address, value, bytes_str));
-        }
-
-        fs::write("./tests/data/out/huff_file.txt", output.as_bytes());
     }
 
     #[test]
     fn huff_rw_decomp() {
         let decompressed_data = fs::read("./tests/data/mhfdat_decrypt_decomp.bin").unwrap();
         let compressed_data = fs::read("./tests/data/mhfdat_decrypted_only.bin").unwrap();
-        let out_vec = decode_jpk_huff(&compressed_data[16..]);
-        let mut decompressed_lz = Vec::new();
-        decode_jpk_lz(&out_vec, &mut decompressed_lz, 28722096);
+        let decompressed_lz = decode_jpk_huff_lz(&compressed_data[16..], 28722096);
 
         assert!(
             decompressed_data == decompressed_lz,
