@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     fs,
     io::{self, Write},
@@ -6,7 +7,9 @@ use std::{
 };
 
 use clap::{Parser, Subcommand};
-use rsfrontier_core::{PackType, jpk, pack_buffer, pack_folder, recursive_pack, unpack_buffer};
+use rsfrontier_core::{
+    FolderPackType, PackType, jpk, pack_buffer, pack_folder, recursive_pack, unpack_buffer,
+};
 
 #[derive(Parser)]
 #[command(author="Pax", version="0.0.1", about="Took for packing and unpacking mhfz files", long_about = None)]
@@ -29,6 +32,15 @@ enum Commands {
 
         #[arg(short, long)]
         encrypt: bool,
+
+        #[arg(short, long)]
+        mha: bool,
+
+        #[arg(short, long)]
+        capacity: Option<u16>,
+
+        #[arg(short, long)]
+        baseid: Option<u16>,
     },
 
     Unpack {
@@ -50,17 +62,39 @@ fn main() {
             output,
             compression,
             encrypt,
+            mha,
+            capacity,
+            baseid,
         } => {
-            let packed_data = if input.is_dir() {
-                pack_folder(&input)
+            let mut packed_data = Vec::new();
+
+            if input.is_dir() {
+                if mha {
+                    if let Some(capacity) = capacity {
+                        if let Some(baseid) = baseid {
+                            packed_data =
+                                pack_folder(&input, FolderPackType::MHA(baseid, capacity));
+                        } else {
+                            panic!("Base file id needed for MHA repacking");
+                        };
+                    } else {
+                        panic!("Capcity needed for MHA repacking");
+                    }
+                } else {
+                    packed_data = pack_folder(&input, FolderPackType::Simple);
+                }
             } else {
                 let file_buf = fs::read(&input).unwrap();
                 if let Some(jpk_type) = compression {
-                    pack_buffer(&file_buf, PackType::Jpk(jpk_type as u16))
+                    packed_data = pack_buffer(&file_buf, PackType::Jpk(jpk_type as u16));
                 } else {
-                    file_buf
+                    packed_data = file_buf;
                 }
-            };
+            }
+
+            if packed_data.is_empty() {
+                panic!("Resulting packed buffer ended up empty");
+            }
 
             let out_data = if encrypt {
                 pack_buffer(&packed_data, PackType::Ecd)

@@ -105,11 +105,21 @@ pub fn create_jpk(data: &[u8], comp_type: u16) -> Vec<u8> {
 }
 
 pub fn is_buf_jpk(buffer: &[u8]) -> bool {
-    let magic = u32::from_le_bytes(buffer[0..4].try_into().unwrap());
+    let magic = u32::from_le_bytes(
+        buffer
+            .get(0..4)
+            .unwrap_or_default()
+            .try_into()
+            .unwrap_or_default(),
+    );
     magic == 441600842
 }
 
-pub fn should_jpk_compress(path: &Path) -> bool {
+pub fn should_jpk_compress(path: &Path, buf: &[u8]) -> bool {
+    if buf.is_empty() {
+        return false;
+    }
+
     if let Some(ext) = path.extension() {
         if let Some(str_ext) = ext.to_str() {
             for acc_ext in JPK_EXTENSIONS {

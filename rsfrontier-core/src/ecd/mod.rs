@@ -119,7 +119,13 @@ pub fn encrypt_ecd(buffer: &[u8]) -> Vec<u8> {
 }
 
 pub fn is_buf_ecd(buffer: &[u8]) -> bool {
-    let magic = u32::from_le_bytes(buffer[0..4].try_into().unwrap());
+    let magic = u32::from_le_bytes(
+        buffer
+            .get(0..4)
+            .unwrap_or_default()
+            .try_into()
+            .unwrap_or_default(),
+    );
     magic == 442786661
 }
 

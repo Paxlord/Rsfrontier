@@ -44,7 +44,7 @@ pub fn encode_simple_archive(files: &[Vec<u8>]) -> Vec<u8> {
 
 pub fn is_buf_simple_archive(buf: &[u8]) -> bool {
     let mut cursor = Cursor::new(buf);
-    let file_count = cursor.read_u32::<LittleEndian>().unwrap();
+    let file_count = cursor.read_u32::<LittleEndian>().unwrap_or(10000);
 
     if file_count >= 9999 {
         return false;

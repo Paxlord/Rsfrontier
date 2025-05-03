@@ -6,12 +6,14 @@ use std::{
 use ecd::{decrypt_ecd, encrypt_ecd, is_buf_ecd};
 use jpk::{create_jpk, decode_jpk, is_buf_jpk, should_jpk_compress};
 use magic::{find_buf_extension, get_extension};
+use mha::{decode_mha_archive, encode_mha_archive, is_buf_mha};
 use queues::{IsQueue, Queue};
 use simple_archive::{decode_simple_archive, encode_simple_archive, is_buf_simple_archive};
 
 pub mod ecd;
 pub mod jpk;
 pub mod magic;
+pub mod mha;
 pub mod simple_archive;
 
 pub struct UnpackedFile {
@@ -32,6 +34,11 @@ pub enum UnpackResult {
 pub enum PackType {
     Ecd,
     Jpk(u16),
+}
+
+pub enum FolderPackType {
+    Simple,
+    MHA(u16, u16),
 }
 
 fn recursive_unpack(
@@ -63,38 +70,73 @@ fn recursive_unpack(
             return;
         }
 
+        if is_buf_mha(&processed_buffer) {
+            println!("Found mha archive");
+            let in_buffers = decode_mha_archive(&processed_buffer);
+            for (name, file_buf) in in_buffers {
+                let mut new_pathbuf = current_pathbuf.clone();
+                new_pathbuf.push(name);
+                new_pathbuf.set_extension("");
+                recursive_unpack(&file_buf, &new_pathbuf, out);
+            }
+            return;
+        }
+
         break;
     }
 
     let get_file_ext = find_buf_extension(&processed_buffer);
     let mut final_path_buf = current_pathbuf.clone();
-    final_path_buf.set_extension(get_file_ext);
+
+    if let Some(file_name) = final_path_buf.file_name() {
+        if file_name.to_string_lossy().starts_with(".") {
+            final_path_buf.set_extension("");
+        } else {
+            final_path_buf.set_extension(get_file_ext);
+        }
+    }
 
     out.push((final_path_buf, processed_buffer));
 }
 
-pub fn recursive_pack(current_path: &Path) -> Queue<Vec<u8>> {
-    let mut folder_queue: Queue<Vec<u8>> = Queue::new();
+pub fn recursive_pack(current_path: &Path) -> Queue<(PathBuf, Vec<u8>)> {
+    let mut folder_queue: Queue<(PathBuf, Vec<u8>)> = Queue::new();
     if current_path.is_dir() {
         for entry in fs::read_dir(current_path).unwrap() {
             let entry = entry.unwrap();
             let entry_path = entry.path();
+
+            //Skips metadata files
+            if let Some(entry_name) = entry_path.file_name() {
+                if entry_name.to_string_lossy().starts_with(".") {
+                    continue;
+                }
+            }
+
             if entry_path.is_dir() {
                 let mut sub_folder_queue = recursive_pack(&entry_path);
                 let mut simple_archive_vec = Vec::new();
                 while sub_folder_queue.size() > 0 {
                     let file = sub_folder_queue.remove().unwrap();
-                    simple_archive_vec.push(file);
+                    simple_archive_vec.push(file.1);
                 }
                 let simple_archive_buf = encode_simple_archive(&simple_archive_vec);
-                let _ = folder_queue.add(simple_archive_buf);
+                let mut file_pathbuf = entry_path.clone();
+                let file_ext = find_buf_extension(&simple_archive_buf);
+                file_pathbuf.set_extension(file_ext);
+                let _ = folder_queue.add((file_pathbuf, simple_archive_buf));
             } else {
                 let file_buf = fs::read(&entry_path).unwrap();
-                if should_jpk_compress(&entry_path) {
+                let mut file_pathbuf = entry_path.clone();
+                if should_jpk_compress(&entry_path, &file_buf) {
                     let comp_buf = create_jpk(&file_buf, 4);
-                    let _ = folder_queue.add(comp_buf).unwrap();
+                    let file_ext = find_buf_extension(&comp_buf);
+                    file_pathbuf.set_extension(file_ext);
+                    let _ = folder_queue.add((file_pathbuf, comp_buf)).unwrap();
                 } else {
-                    let _ = folder_queue.add(file_buf).unwrap();
+                    let file_ext = find_buf_extension(&file_buf);
+                    file_pathbuf.set_extension(file_ext);
+                    let _ = folder_queue.add((file_pathbuf, file_buf)).unwrap();
                 }
             }
         }
@@ -124,12 +166,27 @@ pub fn pack_buffer(buf: &[u8], pack_type: PackType) -> Vec<u8> {
     current_buffer
 }
 
-pub fn pack_folder(folder_path: &Path) -> Vec<u8> {
+pub fn pack_folder(folder_path: &Path, pack_type: FolderPackType) -> Vec<u8> {
     let mut folder_queue = recursive_pack(folder_path);
-    let mut simple_archive_vec = Vec::new();
-    while folder_queue.size() > 0 {
-        let file = folder_queue.remove().unwrap();
-        simple_archive_vec.push(file);
+
+    match pack_type {
+        FolderPackType::Simple => {
+            let mut simple_archive_vec = Vec::new();
+            while folder_queue.size() > 0 {
+                let file = folder_queue.remove().unwrap();
+                simple_archive_vec.push(file.1);
+            }
+            encode_simple_archive(&simple_archive_vec)
+        }
+        FolderPackType::MHA(base_file_id, capacity) => {
+            let mut mha_vec = Vec::new();
+            while folder_queue.size() > 0 {
+                let file = folder_queue.remove().unwrap();
+                if let Some(file_name) = file.0.file_name() {
+                    mha_vec.push((file_name.to_string_lossy().to_string(), file.1));
+                }
+            }
+            encode_mha_archive(mha_vec, base_file_id, capacity)
+        }
     }
-    encode_simple_archive(&simple_archive_vec)
 }

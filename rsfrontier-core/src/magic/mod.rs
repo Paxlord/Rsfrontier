@@ -17,12 +17,22 @@ pub fn get_extension(magic: u32) -> Option<&'static str> {
 }
 
 pub fn is_file_fmod(buf: &[u8]) -> bool {
-    let header = u32::from_le_bytes(buf[0..4].try_into().unwrap());
+    let header = u32::from_le_bytes(
+        buf.get(0..4)
+            .unwrap_or_default()
+            .try_into()
+            .unwrap_or_default(),
+    );
     if header != 1 {
         return false;
     }
 
-    let file_len = u32::from_le_bytes(buf[8..12].try_into().unwrap());
+    let file_len = u32::from_le_bytes(
+        buf.get(8..12)
+            .unwrap_or_default()
+            .try_into()
+            .unwrap_or_default(),
+    );
     if file_len != buf.len() as u32 {
         return false;
     }
@@ -31,12 +41,22 @@ pub fn is_file_fmod(buf: &[u8]) -> bool {
 }
 
 pub fn is_file_fskl(buf: &[u8]) -> bool {
-    let header = u32::from_le_bytes(buf[0..4].try_into().unwrap());
+    let header = u32::from_le_bytes(
+        buf.get(0..4)
+            .unwrap_or_default()
+            .try_into()
+            .unwrap_or_default(),
+    );
     if header != 0xC0000000 {
         return false;
     }
 
-    let file_len = u32::from_le_bytes(buf[8..12].try_into().unwrap());
+    let file_len = u32::from_le_bytes(
+        buf.get(8..12)
+            .unwrap_or_default()
+            .try_into()
+            .unwrap_or_default(),
+    );
     if file_len != buf.len() as u32 {
         return false;
     }
@@ -45,7 +65,12 @@ pub fn is_file_fskl(buf: &[u8]) -> bool {
 }
 
 pub fn find_buf_extension(buf: &[u8]) -> &str {
-    if let Some(ext) = get_extension(u32::from_le_bytes(buf[0..4].try_into().unwrap())) {
+    if let Some(ext) = get_extension(u32::from_le_bytes(
+        buf.get(0..4)
+            .unwrap_or_default()
+            .try_into()
+            .unwrap_or_default(),
+    )) {
         return ext;
     }
 
