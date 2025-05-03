@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*' # Trigger on version tags like v1.0, v2.3.4
 
 jobs:
   build:
@@ -15,17 +15,18 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: rsfrontier-cli
-            asset_name: rsfrontier-linux-amd64
+            artifact_name: rsfrontier-cli          # Original binary name
+            asset_name: rsfrontier-linux-amd64     # Name for the release asset
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: rsfrontier-cli.exe
-            asset_name: rsfrontier-windows-amd64.exe
+            artifact_name: rsfrontier-cli.exe      # Original binary name
+            asset_name: rsfrontier-windows-amd64.exe # Name for the release asset
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4 # Use v4
 
-      - name: Install Rust
+      - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -33,26 +34,28 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
-      - name: Build
+      - name: Build binary
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --release --target ${{ matrix.target }} -p rsfrontier-cli
+          args: --release --target ${{ matrix.target }} -p rsfrontier-cli # Ensure '-p rsfrontier-cli' matches your package name if needed
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v2
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4 # Use v4
         with:
-          name: ${{ matrix.asset_name }}
-          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          name: ${{ matrix.asset_name }} # Use the desired final asset name for the artifact name
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }} # Path to the actual built file
+          if-no-files-found: error # Fail job if built file is not found
 
   create_release:
-    name: Create Release
+    name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: build # Wait for all builds to complete
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }} # Pass upload URL to dependent jobs
+    permissions:
+      contents: write # Needed to create releases
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -60,58 +63,61 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
+          release_name: Release ${{ github.ref_name }} # Use the tag name (e.g., v1.0.0)
           body: |
             RSFrontier release ${{ github.ref_name }}
-            
+
             ## Changes in this release
-            
-            <!-- Add release notes here -->
 
-      - name: Save Release URL
-        run: echo "${{ steps.create_release.outputs.upload_url }}" > release_url.txt
-
-      - name: Upload Release URL artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: release_url
-          path: release_url.txt
+            <!-- Add detailed release notes here -->
+            See commit history for details.
+          draft: false
+          prerelease: false # Set to true if this is a pre-release
 
   upload_assets:
-    name: Upload Assets
+    name: Upload Release Assets
     runs-on: ubuntu-latest
-    needs: create_release
+    needs: create_release # Wait for release creation
+    permissions:
+      contents: write # Needed to write release assets
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - asset_name: rsfrontier-linux-amd64
+          # This matrix now needs both the final asset name AND the original artifact name
+          - artifact_name: rsfrontier-cli          # Original binary name (matches build matrix)
+            asset_name: rsfrontier-linux-amd64     # Name for the release asset (matches build matrix)
             asset_content_type: application/octet-stream
-          - asset_name: rsfrontier-windows-amd64.exe
+          - artifact_name: rsfrontier-cli.exe      # Original binary name (matches build matrix)
+            asset_name: rsfrontier-windows-amd64.exe # Name for the release asset (matches build matrix)
             asset_content_type: application/octet-stream
 
     steps:
-      - name: Download Release URL
-        uses: actions/download-artifact@v2
-        with:
-          name: release_url
+      # No need to pass URL via artifact anymore, use needs context
+      # - name: Download Release URL artifact
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: release_url
+      #
+      # - name: Get Release URL
+      #   id: get_release_url
+      #   run: echo "upload_url=$(cat release_url.txt)" >> $GITHUB_OUTPUT # Use new syntax
 
-      - name: Get Release URL
-        id: get_release_url
-        run: echo "::set-output name=upload_url::$(cat release_url.txt)"
-
-      - name: Download artifact
-        uses: actions/download-artifact@v2
+      - name: Download specific build artifact
+        uses: actions/download-artifact@v4 # Use v4
         with:
-          name: ${{ matrix.asset_name }}
+          name: ${{ matrix.asset_name }} # Download the artifact named after the final asset name
+
+      - name: Display structure
+        run: ls -R
+        shell: bash
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.get_release_url.outputs.upload_url }}
-          asset_path: ./${{ matrix.asset_name }}
-          asset_name: ${{ matrix.asset_name }}
+          upload_url: ${{ needs.create_release.outputs.upload_url }} # Get URL directly from 'create_release' job outputs
+          asset_path: ./${{ matrix.artifact_name }} # The downloaded file will have the ORIGINAL name
+          asset_name: ${{ matrix.asset_name }} # The desired name for the asset in the release
           asset_content_type: ${{ matrix.asset_content_type }}
