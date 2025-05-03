@@ -40,7 +40,7 @@ The tool can automatically recognize and process the following formats during un
 
 ### Option 1: Pre-compiled Binaries (Recommended)
 
-Check the **[Releases](https://github.com/Paxlord/rsfrontier/releases)** page for pre-compiled binaries for your operating system. Download the appropriate executable, place it somewhere in your system's `PATH`, or run it directly from its location.
+Check the **[Releases](https://github.com/Paxlord/Rsfrontier/releases)** page for pre-compiled binaries for your operating system. Download the appropriate executable, place it somewhere in your system's `PATH`, or run it directly from its location.
 
 ### Option 2: Using Cargo
 
@@ -145,7 +145,7 @@ rsfrontier unpack -i <input-file> [-o <output-directory>]
 1.  **Install Rust:** If you don't have it, get it from [rustup.rs](https://rustup.rs/).
 2.  **Clone the repository:**
     ```bash
-    git clone https://github.com/Paxlord/rsfrontier.git
+    git clone https://github.com/Paxlord/Rsfrontier.git
     cd rsfrontier
     ```
 3.  **Build:**
