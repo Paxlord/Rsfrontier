@@ -40,14 +40,14 @@ The tool can automatically recognize and process the following formats during un
 
 ### Option 1: Pre-compiled Binaries (Recommended)
 
-Check the **[Releases](https://github.com/[your-username/rsfrontier]/releases)** page for pre-compiled binaries for your operating system. Download the appropriate executable, place it somewhere in your system's `PATH`, or run it directly from its location.
+Check the **[Releases](https://github.com/Paxlord/rsfrontier/releases)** page for pre-compiled binaries for your operating system. Download the appropriate executable, place it somewhere in your system's `PATH`, or run it directly from its location.
 
 ### Option 2: Using Cargo
 
 If you have the Rust toolchain installed (`rustup`), you can install directly from the source repository:
 
 ```bash
-cargo install --git https://github.com/[your-username/rsfrontier].git rsfrontier-cli
+cargo install --git https://github.com/Paxlord/rsfrontier.git rsfrontier-cli
 
 ```
 
@@ -82,11 +82,6 @@ rsfrontier pack -i <input-path> -o <output-file> [options]
 
 **Examples:**
 
-1.  **Pack a single file (no compression):**
-    ```bash
-    rsfrontier pack -i model.fskl -o packed_model.bin
-    ```
-
 2.  **Pack a single file with JPK Type 4 compression:**
     ```bash
     rsfrontier pack -i 000_model.fmod -o 000_model.bin -c 4
@@ -100,19 +95,19 @@ rsfrontier pack -i <input-path> -o <output-file> [options]
     ```
 
 4.  **Pack a directory into an MHA Archive:**
-    *(Requires base ID and capacity)*
+    *(Requires base ID and capacity that can be found in the .metadata file generated when unpacking)*
     ```bash
     rsfrontier pack -i ./mha_source_files/ --mha --baseid 500 --capacity 500 -o custom_archive.abn
     ```
 
 5.  **Pack a directory and encrypt the result:**
     ```bash
-    rsfrontier pack -i ./data/ -o encrypted_archive.dat --encrypt
+    rsfrontier pack -i ./data/ -o encrypted_archive.bin --encrypt
     ```
 
 6.  **Pack to standard output:**
     ```bash
-    rsfrontier pack -i file.dds | other_command
+    rsfrontier pack -i file.dds > file.bin
     ```
 
 ### Unpacking
@@ -128,13 +123,13 @@ rsfrontier unpack -i <input-file> [-o <output-directory>]
 **Examples:**
 
 1.  **Unpack a file to a default directory:**
-    *(If input is `mhfdat.bin`, creates `./mhfdat/` and unpacks contents there)*
+    *(If input is `mhfdat.bin`, creates `./mhfdat.bin` in the executable's folder)*
     ```bash
     rsfrontier unpack -i mhfdat.bin
     ```
 
 2.  **Unpack a file to a specific output directory:**
-    *(If input is `resource.pak`, creates `./extracted/resource/` and unpacks contents there)*
+    *(If input is `resource.pac`, creates `./extracted/resource/` and unpacks contents there)*
     ```bash
     rsfrontier unpack -i resource.pac -o ./extracted/
     ```
@@ -159,15 +154,11 @@ rsfrontier unpack -i <input-file> [-o <output-directory>]
     ```
 4.  **Run:** The executable will be located at `target/release/rsfrontier-cli` (or `target\release\rsfrontier-cli.exe` on Windows). You can copy this file to a location in your system's `PATH`.
 
-## License
-
-This project is licensed under the [MIT License](./LICENSE). 
-
 ## Contributing
 
 Contributions are welcome! Please feel free to open an issue or submit a pull request.
 
 ## Acknowledgements
 
-*   This project is heavily inspired by **ReFrontier**, developed by **MhVuze**. ReFrontier served as the primary reference for creating `rsfrontier`. Many thanks to MhVuze for his work.
+*   This project is heavily inspired by [**ReFrontier**](https://github.com/mhvuze/ReFrontier), developed by **MhVuze**. ReFrontier served as the primary reference for creating `rsfrontier`. Many thanks to Vuze for his work.
 
