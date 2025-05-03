@@ -2,10 +2,15 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use core::fmt;
 use decode::{decode_jpk_huff, decode_jpk_huff_lz, decode_jpk_lz, decode_jpk_raw};
 use encode::{encode_jpk_huff, encode_jpk_huff_lz, encode_jpk_lz};
-use std::io::{Cursor, Error};
+use std::{
+    io::{Cursor, Error},
+    path::{Path, PathBuf},
+};
 
 mod decode;
 mod encode;
+
+const JPK_EXTENSIONS: [&str; 3] = ["bin", "fmod", "fskl"];
 
 #[derive(Debug)]
 pub enum JpkError {
@@ -102,6 +107,20 @@ pub fn create_jpk(data: &[u8], comp_type: u16) -> Vec<u8> {
 pub fn is_buf_jpk(buffer: &[u8]) -> bool {
     let magic = u32::from_le_bytes(buffer[0..4].try_into().unwrap());
     magic == 441600842
+}
+
+pub fn should_jpk_compress(path: &Path) -> bool {
+    if let Some(ext) = path.extension() {
+        if let Some(str_ext) = ext.to_str() {
+            for acc_ext in JPK_EXTENSIONS {
+                if str_ext == acc_ext {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
