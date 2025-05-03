@@ -33,7 +33,7 @@ The tool can automatically recognize and process the following formats during un
 *   **Encryption:** ECD
 *   **Compression:** JPK (Types 0, 2, 3, 4)
 *   **Archives:**
-    *   Simple Archive (often seen in `.pac` or nested within other files)
+    *   Simple Archive (often seen in `.pac`/`.txb` or nested within other files)
     *   MHA Archive (`.abn`)
 
 ## Installation
