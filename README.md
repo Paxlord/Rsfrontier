@@ -25,7 +25,6 @@ This tool aims to provide a simple and efficient way to work with common MHFZ co
         *   MHA Archives
     *   Automatic file extension detection based on magic bytes (e.g., `.dds`, `.png`, `.ogg`, `.fmod`, `.fskl`) where possible, defaulting to `.bin`.
 *   **Cross-Platform:** Built with Rust, compilable for Windows, macOS, and Linux.
-*   **Performance:** Designed with performance in mind, leveraging Rust's strengths.
 
 ## Supported Formats
 
