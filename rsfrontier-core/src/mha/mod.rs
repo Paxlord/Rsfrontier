@@ -1,6 +1,6 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{Cursor, Seek, Write};
-use std::{str, string};
+use std::str;
 
 pub fn is_buf_mha(buf: &[u8]) -> bool {
     let magic: u32 = u32::from_le_bytes(

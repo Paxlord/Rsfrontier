@@ -5,7 +5,7 @@ use std::{
 
 use ecd::{decrypt_ecd, encrypt_ecd, is_buf_ecd};
 use jpk::{create_jpk, decode_jpk, is_buf_jpk, should_jpk_compress};
-use magic::{find_buf_extension, get_extension};
+use magic::find_buf_extension;
 use mha::{decode_mha_archive, encode_mha_archive, is_buf_mha};
 use queues::{IsQueue, Queue};
 use simple_archive::{decode_simple_archive, encode_simple_archive, is_buf_simple_archive};
@@ -43,7 +43,7 @@ pub enum FolderPackType {
 
 fn recursive_unpack(
     current_buffer: &[u8],
-    current_pathbuf: &PathBuf,
+    current_pathbuf: PathBuf,
     out: &mut Vec<(PathBuf, Vec<u8>)>,
 ) {
     let mut processed_buffer = current_buffer.to_vec();
@@ -65,7 +65,7 @@ fn recursive_unpack(
                 let folder_name = format!("{:04}", i);
                 let mut new_pathbuf = current_pathbuf.clone();
                 new_pathbuf.push(folder_name);
-                recursive_unpack(in_buf, &new_pathbuf, out);
+                recursive_unpack(in_buf, new_pathbuf, out);
             }
             return;
         }
@@ -77,7 +77,7 @@ fn recursive_unpack(
                 let mut new_pathbuf = current_pathbuf.clone();
                 new_pathbuf.push(name);
                 new_pathbuf.set_extension("");
-                recursive_unpack(&file_buf, &new_pathbuf, out);
+                recursive_unpack(&file_buf, new_pathbuf, out);
             }
             return;
         }
@@ -147,7 +147,7 @@ pub fn recursive_pack(current_path: &Path) -> Queue<(PathBuf, Vec<u8>)> {
 pub fn unpack_buffer(prefix_path: &str, buf: &[u8]) -> Vec<(PathBuf, Vec<u8>)> {
     let mut out = Vec::new();
     let base_path = PathBuf::from(prefix_path);
-    recursive_unpack(buf, &base_path, &mut out);
+    recursive_unpack(buf, base_path, &mut out);
     out
 }
 

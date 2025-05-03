@@ -3,13 +3,11 @@ use std::{
     fs,
     io::{self, Write},
     path::PathBuf,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 use clap::{Parser, Subcommand};
-use rsfrontier_core::{
-    FolderPackType, PackType, jpk, pack_buffer, pack_folder, recursive_pack, unpack_buffer,
-};
+use rsfrontier_core::{FolderPackType, PackType, pack_buffer, pack_folder, unpack_buffer};
 
 #[derive(Parser)]
 #[command(author="Pax", version="0.0.1", about="Took for packing and unpacking mhfz files", long_about = None)]
@@ -66,7 +64,7 @@ fn main() {
             capacity,
             baseid,
         } => {
-            let mut packed_data = Vec::new();
+            let packed_data;
 
             if input.is_dir() {
                 if mha {

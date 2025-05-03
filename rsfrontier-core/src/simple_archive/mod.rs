@@ -74,12 +74,7 @@ pub fn is_buf_simple_archive(buf: &[u8]) -> bool {
 
 #[cfg(test)]
 pub mod test {
-    use std::{
-        fs,
-        io::{Cursor, Write},
-    };
-
-    use byteorder::{LittleEndian, WriteBytesExt};
+    use std::fs;
 
     use crate::simple_archive::is_buf_simple_archive;
 
