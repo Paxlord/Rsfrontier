@@ -74,6 +74,7 @@ fn recursive_unpack(
             println!("Found mha archive");
             let in_buffers = decode_mha_archive(&processed_buffer);
             for (name, file_buf) in in_buffers {
+                dbg!(name);
                 let mut new_pathbuf = current_pathbuf.clone();
                 new_pathbuf.push(name);
                 new_pathbuf.set_extension("");

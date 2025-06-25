@@ -47,6 +47,7 @@ impl From<JpkError> for Error {
     }
 }
 
+#[derive(Debug)]
 pub struct JpkHeader {
     magic: u32,
     version: u16,

@@ -56,10 +56,10 @@ impl<'a> BitWriter<'a> {
     }
 
     pub fn flush(&mut self) {
-        if self.shift_idx != 7 {
+        if self.shift_idx != 8 {
             self.buffer.push(self.current_byte);
             self.current_byte = 0;
-            self.shift_idx = 7;
+            self.shift_idx = 8;
         }
     }
 }
