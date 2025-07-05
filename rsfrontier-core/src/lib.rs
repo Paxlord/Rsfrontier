@@ -103,8 +103,14 @@ fn recursive_unpack(
 pub fn recursive_pack(current_path: &Path) -> Queue<(PathBuf, Vec<u8>)> {
     let mut folder_queue: Queue<(PathBuf, Vec<u8>)> = Queue::new();
     if current_path.is_dir() {
-        for entry in fs::read_dir(current_path).unwrap() {
-            let entry = entry.unwrap();
+        let mut entries: Vec<_> = fs::read_dir(current_path)
+            .unwrap()
+            .filter_map(Result::ok)
+            .collect();
+
+        entries.sort_by_key(|e| e.file_name());
+
+        for entry in entries {
             let entry_path = entry.path();
 
             //Skips metadata files
