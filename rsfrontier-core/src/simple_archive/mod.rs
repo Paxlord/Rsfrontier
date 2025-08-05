@@ -2,6 +2,10 @@ use std::io::{Cursor, Write};
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
+fn align_up(value: u32, alignment: u32) -> u32 {
+    (value + alignment - 1) & !(alignment - 1)
+}
+
 pub fn decode_simple_archive(buf: &[u8]) -> Vec<Vec<u8>> {
     let mut out = Vec::new();
     let mut cursor = Cursor::new(buf);
@@ -27,16 +31,27 @@ pub fn encode_simple_archive(files: &[Vec<u8>]) -> Vec<u8> {
     cursor.write_u32::<LittleEndian>(file_count as u32).unwrap();
 
     let mut file_start_off = (4 + file_count * 8) as u32;
+    const ALIGNMENT: u32 = 4;
 
     for file in files {
         let buf_size = file.len();
         cursor.write_u32::<LittleEndian>(file_start_off).unwrap();
         cursor.write_u32::<LittleEndian>(buf_size as u32).unwrap();
-        file_start_off += buf_size as u32;
+
+        let padded_size = align_up(buf_size as u32, ALIGNMENT);
+        file_start_off += padded_size;
     }
 
     for file in files {
-        let _ = cursor.write(file).unwrap();
+        cursor.write_all(file).unwrap();
+
+        let original_size = file.len() as u32;
+        let padded_size = align_up(original_size, ALIGNMENT);
+        let padding_needed = padded_size - original_size;
+
+        if padding_needed > 0 {
+            cursor.write_all(&vec![0; padding_needed as usize]).unwrap();
+        }
     }
 
     cursor.into_inner()

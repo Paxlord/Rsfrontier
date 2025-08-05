@@ -136,7 +136,7 @@ pub fn recursive_pack(current_path: &Path) -> Queue<(PathBuf, Vec<u8>)> {
                 let file_buf = fs::read(&entry_path).unwrap();
                 let mut file_pathbuf = entry_path.clone();
                 if should_jpk_compress(&entry_path, &file_buf) {
-                    let comp_buf = create_jpk(&file_buf, 4);
+                    let comp_buf = create_jpk(&file_buf, 3);
                     let file_ext = find_buf_extension(&comp_buf);
                     file_pathbuf.set_extension(file_ext);
                     let _ = folder_queue.add((file_pathbuf, comp_buf)).unwrap();
@@ -214,4 +214,31 @@ pub fn pack_em_folder(folder_path: &Path) -> Vec<u8> {
         counter += 1;
     }
     encode_simple_archive(&simple_archive_vec)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_em_roundtrip_deep_compare() {
+        let test_path = Path::new("tests/data/em152-hd");
+        let og_em_archive = fs::read("D:\\FrontierForkedVer\\Client\\Monster Hunter Frontier Online\\dat\\emmodel-hd\\em152-hd.pac").unwrap();
+        let unpacked_files = unpack_buffer(test_path.to_str().unwrap(), &og_em_archive);
+        for (path, buf) in &unpacked_files {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+
+            fs::write(path, buf).unwrap();
+        }
+        let repacked_em_archive = pack_em_folder(test_path);
+        let repacked_files = unpack_buffer(test_path.to_str().unwrap(), &repacked_em_archive);
+        assert_eq!(unpacked_files.len(), repacked_files.len());
+        for (i, (path, buf)) in unpacked_files.iter().enumerate() {
+            let (repacked_path, repacked_buf) = &repacked_files[i];
+            assert_eq!(path, repacked_path);
+            assert_eq!(buf, repacked_buf);
+        }
+    }
 }
