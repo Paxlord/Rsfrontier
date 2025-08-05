@@ -7,7 +7,11 @@ use std::{
 };
 
 use clap::{Parser, Subcommand};
-use rsfrontier_core::{FolderPackType, PackType, pack_buffer, pack_folder, unpack_buffer};
+use rsfrontier_core::{
+    FolderPackType, PackType,
+    ecd::{decrypt_ecd, is_buf_ecd},
+    pack_buffer, pack_em_folder, pack_folder, unpack_buffer,
+};
 
 /// A command-line tool for packing and unpacking various file formats
 /// used in Monster Hunter Frontier Z (MHFZ).
@@ -80,6 +84,10 @@ enum Commands {
         /// Required if --mha is used.
         #[arg(long, value_name = "ID", requires = "mha")]
         baseid: Option<u16>,
+
+        /// Flag for specially handling monster archives that need a special packing scheme.
+        #[arg(long)]
+        em: bool,
     },
 
     /// Unpacks an MHFZ file recursively, handling nested archives and compressions.
@@ -108,6 +116,11 @@ enum Commands {
         ///   with directory creation logic. It's safer to provide directory paths.
         #[arg(short, long, value_name = "DIR")]
         output: Option<PathBuf>,
+
+        /// Only decrypt the input file using ECD without unpacking.
+        /// This is useful for decrypting files without further processing.
+        #[arg(long)]
+        decrypt: bool,
     },
 }
 
@@ -124,14 +137,20 @@ fn main() {
             mha,
             capacity,
             baseid,
+            em,
         } => {
             let packed_data;
 
             if input.is_dir() {
                 if mha {
+                    if em {
+                        panic!("--em cannot be used with --mha. Use --mha only for MHA archives.");
+                    }
                     let capacity = capacity.expect("--capacity is required with --mha");
                     let baseid = baseid.expect("--baseid is required with --mha");
                     packed_data = pack_folder(&input, FolderPackType::MHA(baseid, capacity));
+                } else if em {
+                    packed_data = pack_em_folder(&input);
                 } else {
                     if compression.is_some() {
                         panic!(
@@ -145,6 +164,9 @@ fn main() {
                     panic!(
                         "--mha, --capacity, --baseid flags can only be used when the input is a directory."
                     );
+                }
+                if em {
+                    panic!("--em cannot be used when packing a single file.");
                 }
                 let file_buf = fs::read(&input).unwrap();
                 if let Some(jpk_type) = compression {
@@ -180,13 +202,16 @@ fn main() {
                 if let Some(parent) = path.parent() {
                     fs::create_dir_all(parent).unwrap();
                 }
-
                 fs::write(path, out_data).unwrap();
             } else {
                 io::stdout().write_all(&out_data).unwrap();
             }
         }
-        Commands::Unpack { input, output } => {
+        Commands::Unpack {
+            input,
+            output,
+            decrypt,
+        } => {
             let output_path = if let Some(path) = output {
                 let derived_path = if path.is_dir() {
                     let mut new_path = path.clone();
@@ -207,6 +232,14 @@ fn main() {
             };
 
             let file_buf = fs::read(&input).unwrap();
+            if decrypt {
+                if !is_buf_ecd(&file_buf) {
+                    panic!("Input file is not ECD encrypted.");
+                }
+                let decrypted_buf = decrypt_ecd(&file_buf);
+                fs::write(&output_path, decrypted_buf).unwrap();
+                return;
+            }
             let unpacked_files = unpack_buffer(&output_path.to_string_lossy(), &file_buf);
 
             for (path, buf) in unpacked_files {

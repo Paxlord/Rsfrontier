@@ -71,6 +71,9 @@ pub fn find_longest_match(
     min_length: usize,
 ) -> Option<(usize, usize)> {
     let mut best_match: Option<(usize, usize)> = None;
+    if (current_buffer.len() < min_length) || (in_buffer.len() < min_length) {
+        return None;
+    }
     let pattern = &current_buffer[0..min_length];
     let pattern_hash = calculate_hash(pattern);
 

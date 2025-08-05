@@ -197,3 +197,21 @@ pub fn pack_folder(folder_path: &Path, pack_type: FolderPackType) -> Vec<u8> {
         }
     }
 }
+
+// Special handling for monster archives, if the number of files in the archive is 7, the last file need to be jpk decompressed before going into the simple archive.
+pub fn pack_em_folder(folder_path: &Path) -> Vec<u8> {
+    let mut folder_queue = recursive_pack(folder_path);
+    let mut simple_archive_vec = Vec::new();
+    let mut counter = 0;
+    while folder_queue.size() > 0 {
+        let file = folder_queue.remove().unwrap();
+        if counter == 6 {
+            let decompressed = decode_jpk(&file.1);
+            simple_archive_vec.push(decompressed);
+        } else {
+            simple_archive_vec.push(file.1);
+        }
+        counter += 1;
+    }
+    encode_simple_archive(&simple_archive_vec)
+}
