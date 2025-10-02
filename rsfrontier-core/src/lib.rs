@@ -10,10 +10,17 @@ use mha::{decode_mha_archive, encode_mha_archive, is_buf_mha};
 use queues::{IsQueue, Queue};
 use simple_archive::{decode_simple_archive, encode_simple_archive, is_buf_simple_archive};
 
+use crate::{
+    link_archive::{decode_link_archive, is_buf_link_archive},
+    nso::{decode_nso_pac, decode_nsores, is_buf_nso_pac},
+};
+
 pub mod ecd;
 pub mod jpk;
+pub mod link_archive;
 pub mod magic;
 pub mod mha;
+pub mod nso;
 pub mod simple_archive;
 
 pub struct UnpackedFile {
@@ -48,6 +55,22 @@ fn recursive_unpack(
 ) {
     let mut processed_buffer = current_buffer.to_vec();
 
+    if current_pathbuf
+        .extension()
+        .is_some_and(|ext| ext == "nsores")
+    {
+        let nsores_parts = decode_nsores(&processed_buffer);
+
+        for (name, file_buf) in nsores_parts {
+            let mut new_pathbuf = current_pathbuf.clone();
+            new_pathbuf.set_file_name(current_pathbuf.file_stem().unwrap());
+            new_pathbuf.push(name);
+
+            recursive_unpack(&file_buf, new_pathbuf, out);
+        }
+        return;
+    }
+
     loop {
         if is_buf_ecd(&processed_buffer) {
             processed_buffer = decrypt_ecd(&processed_buffer);
@@ -57,6 +80,39 @@ fn recursive_unpack(
         if is_buf_jpk(&processed_buffer) {
             processed_buffer = decode_jpk(&processed_buffer);
             continue;
+        }
+
+        if is_buf_nso_pac(&processed_buffer) {
+            println!("Found NSO PAC archive");
+            let in_files = decode_nso_pac(&processed_buffer);
+            for (name, file_buf) in in_files {
+                let mut new_pathbuf = current_pathbuf.clone();
+                new_pathbuf.push(&name);
+                recursive_unpack(&file_buf, new_pathbuf, out);
+            }
+            return;
+        }
+
+        if is_buf_link_archive(&processed_buffer) {
+            let files = decode_simple_archive(&processed_buffer);
+            if let Some(link_archive) = decode_link_archive(files) {
+                for (i, entry) in link_archive.entries.iter().enumerate() {
+                    let file_buf = &link_archive.files[i];
+                    let mut new_pathbuf = current_pathbuf.clone();
+
+                    let file_name = format!("{:04}_id_{}", i + 1, entry.file_id);
+                    new_pathbuf.push(file_name);
+
+                    match entry.file_type {
+                        1 => new_pathbuf.set_extension("neo"),
+                        3 => new_pathbuf.set_extension("nes"),
+                        _ => new_pathbuf.set_extension("unk"),
+                    };
+
+                    recursive_unpack(file_buf, new_pathbuf, out);
+                }
+            }
+            return;
         }
 
         if is_buf_simple_archive(&processed_buffer) {
@@ -86,14 +142,20 @@ fn recursive_unpack(
         break;
     }
 
-    let get_file_ext = find_buf_extension(&processed_buffer);
     let mut final_path_buf = current_pathbuf.clone();
 
-    if let Some(file_name) = final_path_buf.file_name() {
-        if file_name.to_string_lossy().starts_with(".") {
-            final_path_buf.set_extension("");
-        } else {
-            final_path_buf.set_extension(get_file_ext);
+    let extension = final_path_buf
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    if extension != "sev" && extension != "json" {
+        let get_file_ext = find_buf_extension(&processed_buffer);
+        if let Some(file_name) = final_path_buf.file_name() {
+            if file_name.to_string_lossy().starts_with(".") {
+                final_path_buf.set_extension("");
+            } else {
+                final_path_buf.set_extension(get_file_ext);
+            }
         }
     }
 

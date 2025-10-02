@@ -7,6 +7,7 @@ pub const MAGIC_TO_EXTENSION: &[(u32, &str)] = &[
     (7302512, "pmo"),
     (0x474e5089, "png"),
     (1213027374, "tmh"),
+    (1398032712, "hit"),
 ];
 
 pub fn get_extension(magic: u32) -> Option<&'static str> {
