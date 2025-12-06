@@ -2,7 +2,7 @@
 members = [
     "rsfrontier-core",
     "rsfrontier-cli"
-]
+, "rsfrontier-wasm"]
 resolver = "3"
 
 [profile.release]
