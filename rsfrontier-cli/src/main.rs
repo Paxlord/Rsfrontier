@@ -121,6 +121,10 @@ enum Commands {
         /// This is useful for decrypting files without further processing.
         #[arg(long)]
         decrypt: bool,
+
+        /// Max Depth of the of the recursive unpack
+        #[arg(short, long)]
+        depth: Option<u8>,
     },
 }
 
@@ -211,6 +215,7 @@ fn main() {
             input,
             output,
             decrypt,
+            depth,
         } => {
             let output_path = if let Some(path) = output {
                 let derived_path = if path.is_dir() {
@@ -240,7 +245,7 @@ fn main() {
                 fs::write(&output_path, decrypted_buf).unwrap();
                 return;
             }
-            let unpacked_files = unpack_buffer(&output_path.to_string_lossy(), &file_buf);
+            let unpacked_files = unpack_buffer(&output_path.to_string_lossy(), &file_buf, depth);
 
             for (path, buf) in unpacked_files {
                 if let Some(parent) = path.parent() {

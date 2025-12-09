@@ -11,8 +11,8 @@ pub fn init() {
 }
 
 #[wasm_bindgen]
-pub fn unpack(data: &[u8], prefix_path: &str) -> Result<JsValue, JsValue> {
-    let unpacked = unpack_buffer(prefix_path, data);
+pub fn unpack(data: &[u8], prefix_path: &str, depth: Option<u8>) -> Result<JsValue, JsValue> {
+    let unpacked = unpack_buffer(prefix_path, data, depth);
 
     let result = js_sys::Array::new();
 

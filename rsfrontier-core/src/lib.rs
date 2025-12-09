@@ -52,7 +52,14 @@ fn recursive_unpack(
     current_buffer: &[u8],
     current_pathbuf: PathBuf,
     out: &mut Vec<(PathBuf, Vec<u8>)>,
+    max_depth: u8,
+    cur_depth: u8
 ) {
+    if cur_depth >= max_depth {
+        out.push((current_pathbuf, current_buffer.to_vec()));
+        return;
+    }
+
     let mut processed_buffer = current_buffer.to_vec();
 
     if current_pathbuf
@@ -66,7 +73,7 @@ fn recursive_unpack(
             new_pathbuf.set_file_name(current_pathbuf.file_stem().unwrap());
             new_pathbuf.push(name);
 
-            recursive_unpack(&file_buf, new_pathbuf, out);
+            recursive_unpack(&file_buf, new_pathbuf, out, max_depth, cur_depth + 1);
         }
         return;
     }
@@ -88,7 +95,7 @@ fn recursive_unpack(
             for (name, file_buf) in in_files {
                 let mut new_pathbuf = current_pathbuf.clone();
                 new_pathbuf.push(&name);
-                recursive_unpack(&file_buf, new_pathbuf, out);
+                recursive_unpack(&file_buf, new_pathbuf, out, max_depth, cur_depth + 1);
             }
             return;
         }
@@ -109,7 +116,7 @@ fn recursive_unpack(
                         _ => new_pathbuf.set_extension("unk"),
                     };
 
-                    recursive_unpack(file_buf, new_pathbuf, out);
+                    recursive_unpack(file_buf, new_pathbuf, out, max_depth, cur_depth + 1);
                 }
             }
             return;
@@ -121,7 +128,7 @@ fn recursive_unpack(
                 let folder_name = format!("{:04}", i);
                 let mut new_pathbuf = current_pathbuf.clone();
                 new_pathbuf.push(folder_name);
-                recursive_unpack(in_buf, new_pathbuf, out);
+                recursive_unpack(in_buf, new_pathbuf, out, max_depth, cur_depth + 1);
             }
             return;
         }
@@ -134,7 +141,7 @@ fn recursive_unpack(
                 let mut new_pathbuf = current_pathbuf.clone();
                 new_pathbuf.push(name);
                 new_pathbuf.set_extension("");
-                recursive_unpack(&file_buf, new_pathbuf, out);
+                recursive_unpack(&file_buf, new_pathbuf, out, max_depth, cur_depth + 1);
             }
             return;
         }
@@ -213,10 +220,10 @@ pub fn recursive_pack(current_path: &Path) -> Queue<(PathBuf, Vec<u8>)> {
     folder_queue
 }
 
-pub fn unpack_buffer(prefix_path: &str, buf: &[u8]) -> Vec<(PathBuf, Vec<u8>)> {
+pub fn unpack_buffer(prefix_path: &str, buf: &[u8], depth: Option<u8>) -> Vec<(PathBuf, Vec<u8>)> {
     let mut out = Vec::new();
     let base_path = PathBuf::from(prefix_path);
-    recursive_unpack(buf, base_path, &mut out);
+    recursive_unpack(buf, base_path, &mut out, depth.unwrap_or(255), 0);
     out
 }
 
@@ -286,7 +293,7 @@ mod tests {
     fn test_em_roundtrip_deep_compare() {
         let test_path = Path::new("tests/data/em152-hd");
         let og_em_archive = fs::read("D:\\FrontierForkedVer\\Client\\Monster Hunter Frontier Online\\dat\\emmodel-hd\\em152-hd.pac").unwrap();
-        let unpacked_files = unpack_buffer(test_path.to_str().unwrap(), &og_em_archive);
+        let unpacked_files = unpack_buffer(test_path.to_str().unwrap(), &og_em_archive, None);
         for (path, buf) in &unpacked_files {
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent).unwrap();
@@ -295,7 +302,7 @@ mod tests {
             fs::write(path, buf).unwrap();
         }
         let repacked_em_archive = pack_em_folder(test_path);
-        let repacked_files = unpack_buffer(test_path.to_str().unwrap(), &repacked_em_archive);
+        let repacked_files = unpack_buffer(test_path.to_str().unwrap(), &repacked_em_archive, None);
         assert_eq!(unpacked_files.len(), repacked_files.len());
         for (i, (path, buf)) in unpacked_files.iter().enumerate() {
             let (repacked_path, repacked_buf) = &repacked_files[i];
