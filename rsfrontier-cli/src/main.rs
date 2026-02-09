@@ -74,6 +74,11 @@ enum Commands {
         #[arg(long)]
         mha: bool,
 
+        /// Pack the input directory as a MOMO archive instead of a Simple Archive.
+        /// This flag is only effective when the input path is a directory.
+        #[arg(long)]
+        momo: bool,
+
         /// Set the 'capacity' field for the MHA archive header.
         /// Required if --mha is used.
         #[arg(long, value_name = "COUNT", requires = "mha")]
@@ -139,6 +144,7 @@ fn main() {
             compression,
             encrypt,
             mha,
+            momo,
             capacity,
             baseid,
             em,
@@ -155,6 +161,8 @@ fn main() {
                     packed_data = pack_folder(&input, FolderPackType::MHA(baseid, capacity));
                 } else if em {
                     packed_data = pack_em_folder(&input);
+                } else if momo {
+                    packed_data = pack_folder(&input, FolderPackType::Momo);
                 } else {
                     if compression.is_some() {
                         panic!(

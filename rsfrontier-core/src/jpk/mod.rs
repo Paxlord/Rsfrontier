@@ -121,12 +121,12 @@ pub fn should_jpk_compress(path: &Path, buf: &[u8]) -> bool {
         return false;
     }
 
-    if let Some(ext) = path.extension() {
-        if let Some(str_ext) = ext.to_str() {
-            for acc_ext in JPK_EXTENSIONS {
-                if str_ext == acc_ext {
-                    return true;
-                }
+    if let Some(ext) = path.extension()
+        && let Some(str_ext) = ext.to_str()
+    {
+        for acc_ext in JPK_EXTENSIONS {
+            if str_ext == acc_ext {
+                return true;
             }
         }
     }

@@ -12,14 +12,17 @@ use simple_archive::{decode_simple_archive, encode_simple_archive, is_buf_simple
 
 use crate::{
     link_archive::{decode_link_archive, is_buf_link_archive},
+    momo::{decode_momo_archive, encode_momo_archive, is_buf_momo_archive},
     nso::{decode_nso_pac, decode_nsores, is_buf_nso_pac},
 };
 
+pub mod binutils;
 pub mod ecd;
 pub mod jpk;
 pub mod link_archive;
 pub mod magic;
 pub mod mha;
+pub mod momo;
 pub mod nso;
 pub mod simple_archive;
 
@@ -46,6 +49,7 @@ pub enum PackType {
 pub enum FolderPackType {
     Simple,
     MHA(u16, u16),
+    Momo,
 }
 
 fn recursive_unpack(
@@ -53,7 +57,7 @@ fn recursive_unpack(
     current_pathbuf: PathBuf,
     out: &mut Vec<(PathBuf, Vec<u8>)>,
     max_depth: u8,
-    cur_depth: u8
+    cur_depth: u8,
 ) {
     if cur_depth >= max_depth {
         out.push((current_pathbuf, current_buffer.to_vec()));
@@ -124,6 +128,17 @@ fn recursive_unpack(
 
         if is_buf_simple_archive(&processed_buffer) {
             let in_buffers = decode_simple_archive(&processed_buffer);
+            for (i, in_buf) in in_buffers.iter().enumerate() {
+                let folder_name = format!("{:04}", i);
+                let mut new_pathbuf = current_pathbuf.clone();
+                new_pathbuf.push(folder_name);
+                recursive_unpack(in_buf, new_pathbuf, out, max_depth, cur_depth + 1);
+            }
+            return;
+        }
+
+        if is_buf_momo_archive(&processed_buffer) {
+            let in_buffers = decode_momo_archive(&processed_buffer);
             for (i, in_buf) in in_buffers.iter().enumerate() {
                 let folder_name = format!("{:04}", i);
                 let mut new_pathbuf = current_pathbuf.clone();
@@ -263,6 +278,14 @@ pub fn pack_folder(folder_path: &Path, pack_type: FolderPackType) -> Vec<u8> {
                 }
             }
             encode_mha_archive(mha_vec, base_file_id, capacity)
+        }
+        FolderPackType::Momo => {
+            let mut momo_vec = Vec::new();
+            while folder_queue.size() > 0 {
+                let file = folder_queue.remove().unwrap();
+                momo_vec.push(file.1);
+            }
+            encode_momo_archive(&momo_vec)
         }
     }
 }

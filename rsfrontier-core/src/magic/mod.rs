@@ -1,4 +1,4 @@
-pub const MAGIC_TO_EXTENSION: &[(u32, &str)] = &[
+pub const MAGIC_TO_EXTENSION: &[(u32, &str); 10] = &[
     (542327876, "dds"),
     (0x000B0000, "ftxt"),
     (846751303, "gfx2"),
@@ -8,6 +8,7 @@ pub const MAGIC_TO_EXTENSION: &[(u32, &str)] = &[
     (0x474e5089, "png"),
     (1213027374, "tmh"),
     (1398032712, "hit"),
+    (0x5367674F, "ogg"),
 ];
 
 pub fn get_extension(magic: u32) -> Option<&'static str> {
