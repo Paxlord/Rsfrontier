@@ -65,22 +65,28 @@ pub fn is_buf_simple_archive(buf: &[u8]) -> bool {
         return false;
     }
 
-    let mut buf_size = 0;
+    let header_size = (4 + file_count * 8) as usize;
+    if header_size > buf.len() {
+        return false;
+    }
+
+    let mut unpadded_total = 0_usize;
+    let mut padded_total = 0_usize;
 
     for _ in 0..file_count {
         let file_offset = cursor.read_u32::<LittleEndian>().unwrap() as usize;
         let file_size = cursor.read_u32::<LittleEndian>().unwrap() as usize;
 
-        buf_size += file_size;
-
         if file_offset > buf.len() || file_offset + file_size > buf.len() {
             return false;
         }
+
+        unpadded_total += file_size;
+        padded_total += align_up(file_size as u32, 4) as usize;
     }
 
-    let header_size = cursor.position() as usize;
-
-    if buf_size + header_size != buf.len() {
+    let body_size = buf.len() - header_size;
+    if body_size < unpadded_total || body_size > padded_total {
         return false;
     }
 

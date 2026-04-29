@@ -2,6 +2,35 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{Cursor, Seek, Write};
 use std::str;
 
+const MHA_SECTOR_ALIGNMENT: u32 = 512;
+
+fn align_up(value: u32, alignment: u32) -> u32 {
+    (value + alignment - 1) & !(alignment - 1)
+}
+
+fn derive_fid_from_name(name: &str, fallback_idx: u32, base_id: u16) -> u32 {
+    let bytes = name.as_bytes();
+    let mut end = None;
+    for i in (0..bytes.len()).rev() {
+        if bytes[i].is_ascii_digit() {
+            end = Some(i + 1);
+            break;
+        }
+    }
+    let Some(end) = end else {
+        return base_id as u32 + fallback_idx;
+    };
+    let mut start = end;
+    while start > 0 && bytes[start - 1].is_ascii_digit() {
+        start -= 1;
+    }
+    let num_str = std::str::from_utf8(&bytes[start..end]).unwrap();
+    match num_str.parse::<u32>() {
+        Ok(n) => n % 1000,
+        Err(_) => base_id as u32 + fallback_idx,
+    }
+}
+
 pub fn is_buf_mha(buf: &[u8]) -> bool {
     let magic: u32 = u32::from_le_bytes(
         buf.get(0..4)
@@ -64,7 +93,13 @@ pub fn encode_mha_archive(files: Vec<(String, Vec<u8>)>, base_id: u16, capacity:
     let nb_files = files.len();
 
     for (_, file_buf) in &files {
-        let _ = files_buf.write(file_buf);
+        let _ = files_buf.write_all(file_buf);
+        let original_size = file_buf.len() as u32;
+        let padded_size = align_up(original_size, MHA_SECTOR_ALIGNMENT);
+        let padding = (padded_size - original_size) as usize;
+        if padding > 0 {
+            files_buf.extend(std::iter::repeat(0u8).take(padding));
+        }
     }
 
     for (file_name, _) in &files {
@@ -80,10 +115,13 @@ pub fn encode_mha_archive(files: Vec<(String, Vec<u8>)>, base_id: u16, capacity:
         relative_str_off += file_name.len() + 1;
         let _ =
             metadata_buf.write_u32::<LittleEndian>((header_size + relative_file_data_off) as u32);
-        relative_file_data_off += file_buf.len();
-        let _ = metadata_buf.write_u32::<LittleEndian>(file_buf.len() as u32);
-        let _ = metadata_buf.write_u32::<LittleEndian>(file_buf.len() as u32);
-        let _ = metadata_buf.write_u32::<LittleEndian>((base_id as u32) + (file_count as u32));
+        let size = file_buf.len() as u32;
+        let size2 = align_up(size, MHA_SECTOR_ALIGNMENT);
+        relative_file_data_off += size2 as usize;
+        let _ = metadata_buf.write_u32::<LittleEndian>(size);
+        let _ = metadata_buf.write_u32::<LittleEndian>(size2);
+        let fid = derive_fid_from_name(&file_name, file_count as u32, base_id);
+        let _ = metadata_buf.write_u32::<LittleEndian>(fid);
     }
 
     let _ = out.write_u32::<LittleEndian>(23160941);
